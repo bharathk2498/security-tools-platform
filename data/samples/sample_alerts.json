@@ -1,90 +1,112 @@
 [
-  {
-    "id": "CHR_001_20240715_103000",
-    "rule_name": "Suspicious Login from TOR Exit Node",
-    "severity": 3,
-    "timestamp": "2024-07-15T10:30:00Z",
-    "source_ip": "185.220.100.240",
-    "destination_ip": "10.0.1.50",
-    "user": "trading_admin@swift.com",
-    "event_type": "authentication_failure",
-    "raw_log": "Failed login attempt for user trading_admin@swift.com from TOR exit node 185.220.100.240"
-  },
-  {
-    "id": "CHR_002_20240715_111500", 
-    "rule_name": "Privilege Escalation via Service Account",
-    "severity": 4,
-    "timestamp": "2024-07-15T11:15:00Z",
-    "source_ip": "10.0.1.100",
-    "destination_ip": "10.0.1.10",
-    "user": "payment_processor@swift.com",
-    "event_type": "privilege_escalation",
-    "raw_log": "Service account payment_processor@swift.com gained administrative privileges outside normal workflow"
-  },
-  {
-    "id": "CHR_003_20240715_143000",
-    "rule_name": "Unusual Wire Transfer Data Access",
-    "severity": 3,
-    "timestamp": "2024-07-15T14:30:00Z",
-    "source_ip": "10.0.2.45",
-    "destination_ip": "10.0.1.25",
-    "user": "back_office@swift.com",
-    "event_type": "data_access",
-    "raw_log": "Unusual access to wire transfer database tables outside business hours by back_office@swift.com"
-  },
-  {
-    "id": "CHR_004_20240715_160000",
-    "rule_name": "Malware Detection on Trading System",
-    "severity": 4,
-    "timestamp": "2024-07-15T16:00:00Z",
-    "source_ip": "10.0.1.85",
-    "destination_ip": "10.0.1.90",
-    "user": "system",
-    "event_type": "malware_detection",
-    "raw_log": "Malware signature detected on trading-system-prod-02: Trojan.Win32.Financial.Banking"
-  },
-  {
-    "id": "CHR_005_20240715_172000",
-    "rule_name": "Lateral Movement Detected",
-    "severity": 2,
-    "timestamp": "2024-07-15T17:20:00Z",
-    "source_ip": "10.0.1.100",
-    "destination_ip": "10.0.2.15",
-    "user": "service_account_trading",
-    "event_type": "lateral_movement",
-    "raw_log": "Service account attempting to access multiple network segments within short timeframe"
-  },
-  {
-    "id": "CHR_006_20240715_185000",
-    "rule_name": "Suspicious File Transfer to External Destination",
-    "severity": 3,
-    "timestamp": "2024-07-15T18:50:00Z",
-    "source_ip": "10.0.2.30",
-    "destination_ip": "203.0.113.45",
-    "user": "financial_analyst@swift.com",
-    "event_type": "data_exfiltration",
-    "raw_log": "Large file transfer (450MB) to external destination during off-hours"
-  },
-  {
-    "id": "CHR_007_20240715_194500",
-    "rule_name": "Failed MFA Authentication Spike",
-    "severity": 2,
-    "timestamp": "2024-07-15T19:45:00Z",
-    "source_ip": "203.0.113.12",
-    "destination_ip": "10.0.1.10",
-    "user": "treasury_manager@swift.com",
-    "event_type": "authentication_failure",
-    "raw_log": "Multiple failed MFA attempts (15) within 10 minutes for treasury_manager@swift.com"
-  },
-  {
-    "id": "CHR_008_20240715_203000",
-    "rule_name": "Cryptocurrency Mining Activity Detected",
-    "severity": 3,
-    "timestamp": "2024-07-15T20:30:00Z",
-    "source_ip": "10.0.3.75",
-    "destination_ip": "185.220.100.15",
-    "user": "workstation_user",
-    "event_type": "crypto_mining",
-    "raw_log": "Cryptocurrency mining software detected on workstation WS-TRADE-047"
-  }
+    {
+        "id": "CHR_001_20250115_103000",
+        "rule_name": "Suspicious Login from TOR Exit Node",
+        "severity": 3,
+        "timestamp": "2025-01-15T10:30:00Z",
+        "source_ip": "185.220.100.240",
+        "destination_ip": "10.0.1.50",
+        "user": "trading_admin@swift.com",
+        "event_type": "authentication_failure",
+        "raw_log": "Failed login attempt for user trading_admin@swift.com from TOR exit node 185.220.100.240. Authentication method: password. Geolocation: Unknown/TOR. Previous successful login: 2025-01-14T09:15:00Z from 10.0.1.25."
+    },
+    {
+        "id": "CHR_002_20250115_111500", 
+        "rule_name": "Privilege Escalation via Service Account",
+        "severity": 4,
+        "timestamp": "2025-01-15T11:15:00Z",
+        "source_ip": "10.0.1.100",
+        "destination_ip": "10.0.1.10",
+        "user": "payment_processor@swift.com",
+        "event_type": "privilege_escalation",
+        "raw_log": "Service account payment_processor@swift.com gained administrative privileges outside normal workflow. Elevated permissions: roles/iam.serviceAccountAdmin. Requested by: automated_system. Time outside business hours detected."
+    },
+    {
+        "id": "CHR_003_20250115_143000",
+        "rule_name": "Unusual Wire Transfer Data Access",
+        "severity": 3,
+        "timestamp": "2025-01-15T14:30:00Z",
+        "source_ip": "10.0.2.45",
+        "destination_ip": "10.0.1.200",
+        "user": "back_office@swift.com",
+        "event_type": "data_access_anomaly",
+        "raw_log": "User back_office@swift.com accessed wire transfer database outside normal pattern. Records accessed: 15,847 transactions totaling $2.4B. Previous average access: 1,200 records/$180M. Time: 14:30 (normal: 09:00-11:00)."
+    },
+    {
+        "id": "CHR_004_20250115_162000",
+        "rule_name": "Malware Detection on Trading System",
+        "severity": 4,
+        "timestamp": "2025-01-15T16:20:00Z",
+        "source_ip": "10.0.1.75",
+        "destination_ip": "10.0.1.80",
+        "user": "system",
+        "event_type": "malware_detection",
+        "raw_log": "Advanced persistent threat detected on trading workstation TRADE-WS-007. Malware signature: APT29.Lazarus.FinancialTrojan. Network communication to C2: 203.113.45.67:443. Market data access attempted. Containment initiated."
+    },
+    {
+        "id": "CHR_005_20250115_175500",
+        "rule_name": "Lateral Movement Detected",
+        "severity": 2,
+        "timestamp": "2025-01-15T17:55:00Z",
+        "source_ip": "10.0.1.150",
+        "destination_ip": "10.0.2.25",
+        "user": "service_account",
+        "event_type": "lateral_movement",
+        "raw_log": "Unusual cross-network movement detected. Source: payment_gateway_service@swift.com accessing trading network segment. Protocol: SMB/445. Files accessed: market_data_feed.xml, trading_config.json. Network traversal pattern indicates reconnaissance."
+    },
+    {
+        "id": "CHR_006_20250115_193000",
+        "rule_name": "Insider Threat - After Hours Data Exfiltration",
+        "severity": 4,
+        "timestamp": "2025-01-15T19:30:00Z",
+        "source_ip": "10.0.3.12",
+        "destination_ip": "203.45.67.89",
+        "user": "senior_analyst@swift.com",
+        "event_type": "data_exfiltration",
+        "raw_log": "Large data transfer detected after business hours. User: senior_analyst@swift.com transferred 2.4GB customer financial data to external IP 203.45.67.89. Files: customer_portfolios.zip, trading_strategies.xlsx, wire_transfer_logs.csv. Transfer method: HTTPS upload."
+    },
+    {
+        "id": "CHR_007_20250115_214500",
+        "rule_name": "Failed Multi-Factor Authentication Bypass Attempt",
+        "severity": 3,
+        "timestamp": "2025-01-15T21:45:00Z",
+        "source_ip": "45.123.67.89",
+        "destination_ip": "10.0.1.10",
+        "user": "cfo@swift.com",
+        "event_type": "authentication_bypass",
+        "raw_log": "Multiple attempts to bypass MFA for high-privilege account cfo@swift.com. Authentication challenges failed 15 times. Source IP: 45.123.67.89 (Romania). User agent: Mozilla/5.0 (automated). Previous successful login: 2025-01-15T17:00:00Z from corporate network."
+    },
+    {
+        "id": "CHR_008_20250116_083000",
+        "rule_name": "Suspicious Trading Algorithm Modification",
+        "severity": 3,
+        "timestamp": "2025-01-16T08:30:00Z",
+        "source_ip": "10.0.1.95",
+        "destination_ip": "10.0.1.200",
+        "user": "quant_developer@swift.com",
+        "event_type": "code_modification",
+        "raw_log": "Unauthorized modification to high-frequency trading algorithm. User: quant_developer@swift.com modified risk_management.py without proper approval workflow. Changes: risk limits increased by 300%, stop-loss mechanisms disabled. Market impact: potential $50M exposure."
+    },
+    {
+        "id": "CHR_009_20250116_101500",
+        "rule_name": "Regulatory Reporting System Tampering",
+        "severity": 4,
+        "timestamp": "2025-01-16T10:15:00Z",
+        "source_ip": "10.0.2.88",
+        "destination_ip": "10.0.2.90",
+        "user": "compliance_officer@swift.com",
+        "event_type": "system_tampering",
+        "raw_log": "Detected modification to regulatory reporting system. User: compliance_officer@swift.com altered transaction reporting filters. Modifications: excluded 1,247 transactions totaling $890M from regulatory filings. Backup systems triggered automatic reversal."
+    },
+    {
+        "id": "CHR_010_20250116_134500",
+        "rule_name": "SWIFT Network Intrusion Attempt",
+        "severity": 4,
+        "timestamp": "2025-01-16T13:45:00Z",
+        "source_ip": "203.15.78.45",
+        "destination_ip": "10.0.4.10",
+        "user": "external",
+        "event_type": "network_intrusion",
+        "raw_log": "Advanced persistent threat targeting SWIFT messaging infrastructure. Attack vector: Spear phishing with Lazarus Group TTPs. Target: SWIFT Alliance Gateway. Payload: Banking trojan with message interception capabilities. Network isolation activated immediately."
+    }
 ]

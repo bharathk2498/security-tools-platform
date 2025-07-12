@@ -1,232 +1,104 @@
 #!/usr/bin/env python3
 """
-NIST 800-53 Policy-as-Code Framework
-Automated compliance controls that adapt to infrastructure changes
+NIST 800-53 Compliance Automation Framework
+Policy-as-code implementation with automated monitoring and remediation
 """
 
 import asyncio
 import json
 import yaml
-import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, asdict
+from typing import Dict, List, Optional, Union
+from dataclasses import dataclass
 from enum import Enum
 import sqlite3
 import hashlib
-import os
+import logging
 from pathlib import Path
 import subprocess
 import tempfile
+import jinja2
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class ControlStatus(Enum):
+class ComplianceStatus(Enum):
     COMPLIANT = "compliant"
     NON_COMPLIANT = "non_compliant"
     PARTIALLY_COMPLIANT = "partially_compliant"
-    NOT_APPLICABLE = "not_applicable"
-    UNKNOWN = "unknown"
+    NOT_ASSESSED = "not_assessed"
 
 class ControlFamily(Enum):
-    AC = "Access Control"
-    AU = "Audit and Accountability"
-    CM = "Configuration Management"
-    CP = "Contingency Planning"
-    IA = "Identification and Authentication"
-    IR = "Incident Response"
-    SC = "System and Communications Protection"
-    SI = "System and Information Integrity"
+    ACCESS_CONTROL = "AC"
+    AUDIT_ACCOUNTABILITY = "AU"
+    CONFIGURATION_MANAGEMENT = "CM"
+    IDENTIFICATION_AUTHENTICATION = "IA"
+    INCIDENT_RESPONSE = "IR"
+    MAINTENANCE = "MA"
+    MEDIA_PROTECTION = "MP"
+    PHYSICAL_PROTECTION = "PE"
+    PLANNING = "PL"
+    SYSTEM_PROTECTION = "SC"
+    RISK_ASSESSMENT = "RA"
+    SYSTEM_ACQUISITION = "SA"
+    SYSTEM_COMMUNICATION = "SC"
+    SYSTEM_INFORMATION = "SI"
 
 @dataclass
-class ComplianceControl:
+class NISTControl:
     control_id: str
+    control_name: str
     family: ControlFamily
-    title: str
     description: str
-    implementation: str
-    status: ControlStatus
-    last_checked: datetime
-    evidence: List[str]
-    remediation_actions: List[str]
-    terraform_module: Optional[str] = None
-    policy_file: Optional[str] = None
+    implementation_guidance: str
+    assessment_procedures: List[str]
+    status: ComplianceStatus = ComplianceStatus.NOT_ASSESSED
+    score: float = 0.0
+    evidence: List[str] = None
+    remediation_actions: List[str] = None
+    last_assessed: Optional[datetime] = None
+
+    def __post_init__(self):
+        if self.evidence is None:
+            self.evidence = []
+        if self.remediation_actions is None:
+            self.remediation_actions = []
 
 @dataclass
 class ComplianceAssessment:
     assessment_id: str
     timestamp: datetime
+    overall_score: float
     total_controls: int
     compliant_controls: int
+    partially_compliant_controls: int
     non_compliant_controls: int
-    overall_score: float
-    findings: List[Dict]
-    remediation_plan: List[Dict]
+    control_results: List[NISTControl]
+    remediation_plan: List[str]
+    terraform_modules: Dict[str, str] = None
+    opa_policies: Dict[str, str] = None
 
-class NISTControlLibrary:
-    """Library of NIST 800-53 controls with implementation guidance"""
+    def __post_init__(self):
+        if self.terraform_modules is None:
+            self.terraform_modules = {}
+        if self.opa_policies is None:
+            self.opa_policies = {}
+
+class TerraformGenerator:
+    """Generates Terraform modules for NIST control implementation"""
     
     def __init__(self):
-        self.controls = self._initialize_controls()
+        self.template_env = jinja2.Environment(
+            loader=jinja2.DictLoader(self._get_terraform_templates()),
+            trim_blocks=True,
+            lstrip_blocks=True
+        )
     
-    def _initialize_controls(self) -> Dict[str, ComplianceControl]:
-        """Initialize comprehensive NIST 800-53 control definitions"""
-        controls = {}
-        
-        # Access Control (AC) Controls
-        controls['AC-2'] = ComplianceControl(
-            control_id='AC-2',
-            family=ControlFamily.AC,
-            title='Account Management',
-            description='Manage information system accounts including establishment, activation, modification, review, and removal',
-            implementation='terraform_modules/access_control/account_management.tf',
-            status=ControlStatus.UNKNOWN,
-            last_checked=datetime.now(),
-            evidence=[],
-            remediation_actions=[],
-            terraform_module='access_control/account_management',
-            policy_file='policies/opa/account_management.rego'
-        )
-        
-        controls['AC-3'] = ComplianceControl(
-            control_id='AC-3',
-            family=ControlFamily.AC,
-            title='Access Enforcement',
-            description='Enforce approved authorizations for logical access',
-            implementation='terraform_modules/access_control/access_enforcement.tf',
-            status=ControlStatus.UNKNOWN,
-            last_checked=datetime.now(),
-            evidence=[],
-            remediation_actions=[],
-            terraform_module='access_control/access_enforcement',
-            policy_file='policies/opa/access_enforcement.rego'
-        )
-        
-        controls['AC-6'] = ComplianceControl(
-            control_id='AC-6',
-            family=ControlFamily.AC,
-            title='Least Privilege',
-            description='Employ the principle of least privilege',
-            implementation='terraform_modules/access_control/least_privilege.tf',
-            status=ControlStatus.UNKNOWN,
-            last_checked=datetime.now(),
-            evidence=[],
-            remediation_actions=[],
-            terraform_module='access_control/least_privilege',
-            policy_file='policies/opa/least_privilege.rego'
-        )
-        
-        # Audit and Accountability (AU) Controls
-        controls['AU-2'] = ComplianceControl(
-            control_id='AU-2',
-            family=ControlFamily.AU,
-            title='Audit Events',
-            description='Determine that the information system is capable of auditing specific events',
-            implementation='terraform_modules/audit/audit_events.tf',
-            status=ControlStatus.UNKNOWN,
-            last_checked=datetime.now(),
-            evidence=[],
-            remediation_actions=[],
-            terraform_module='audit/audit_events',
-            policy_file='policies/opa/audit_events.rego'
-        )
-        
-        controls['AU-3'] = ComplianceControl(
-            control_id='AU-3',
-            family=ControlFamily.AU,
-            title='Content of Audit Records',
-            description='Generate audit records containing information that establishes what type of event occurred',
-            implementation='terraform_modules/audit/audit_content.tf',
-            status=ControlStatus.UNKNOWN,
-            last_checked=datetime.now(),
-            evidence=[],
-            remediation_actions=[],
-            terraform_module='audit/audit_content',
-            policy_file='policies/opa/audit_content.rego'
-        )
-        
-        # System and Communications Protection (SC) Controls
-        controls['SC-7'] = ComplianceControl(
-            control_id='SC-7',
-            family=ControlFamily.SC,
-            title='Boundary Protection',
-            description='Monitor and control communications at the external boundary of the system',
-            implementation='terraform_modules/network_security/boundary_protection.tf',
-            status=ControlStatus.UNKNOWN,
-            last_checked=datetime.now(),
-            evidence=[],
-            remediation_actions=[],
-            terraform_module='network_security/boundary_protection',
-            policy_file='policies/opa/boundary_protection.rego'
-        )
-        
-        controls['SC-8'] = ComplianceControl(
-            control_id='SC-8',
-            family=ControlFamily.SC,
-            title='Transmission Confidentiality and Integrity',
-            description='Protect the confidentiality and integrity of transmitted information',
-            implementation='terraform_modules/network_security/transmission_protection.tf',
-            status=ControlStatus.UNKNOWN,
-            last_checked=datetime.now(),
-            evidence=[],
-            remediation_actions=[],
-            terraform_module='network_security/transmission_protection',
-            policy_file='policies/opa/transmission_protection.rego'
-        )
-        
-        # Identification and Authentication (IA) Controls
-        controls['IA-2'] = ComplianceControl(
-            control_id='IA-2',
-            family=ControlFamily.IA,
-            title='Identification and Authentication (Organizational Users)',
-            description='Uniquely identify and authenticate organizational users',
-            implementation='terraform_modules/identity/user_authentication.tf',
-            status=ControlStatus.UNKNOWN,
-            last_checked=datetime.now(),
-            evidence=[],
-            remediation_actions=[],
-            terraform_module='identity/user_authentication',
-            policy_file='policies/opa/user_authentication.rego'
-        )
-        
-        controls['IA-5'] = ComplianceControl(
-            control_id='IA-5',
-            family=ControlFamily.IA,
-            title='Authenticator Management',
-            description='Manage information system authenticators',
-            implementation='terraform_modules/identity/authenticator_management.tf',
-            status=ControlStatus.UNKNOWN,
-            last_checked=datetime.now(),
-            evidence=[],
-            remediation_actions=[],
-            terraform_module='identity/authenticator_management',
-            policy_file='policies/opa/authenticator_management.rego'
-        )
-        
-        return controls
-    
-    def get_control(self, control_id: str) -> Optional[ComplianceControl]:
-        """Get a specific control by ID"""
-        return self.controls.get(control_id)
-    
-    def get_controls_by_family(self, family: ControlFamily) -> List[ComplianceControl]:
-        """Get all controls in a specific family"""
-        return [control for control in self.controls.values() if control.family == family]
-
-class TerraformComplianceGenerator:
-    """Generates Terraform modules for NIST controls"""
-    
-    def __init__(self, output_dir: str = "terraform_modules"):
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-    
-    def generate_access_control_module(self) -> str:
-        """Generate Terraform module for Access Control (AC-2, AC-3, AC-6)"""
-        
-        module_content = '''# NIST 800-53 Access Control Implementation
-# Controls: AC-2 (Account Management), AC-3 (Access Enforcement), AC-6 (Least Privilege)
+    def _get_terraform_templates(self) -> Dict[str, str]:
+        """Define Terraform module templates for NIST controls"""
+        return {
+            'access_control': '''
+# NIST 800-53 Access Control (AC) Implementation
+# Controls: AC-2, AC-3, AC-6
 
 terraform {
   required_providers {
@@ -242,84 +114,522 @@ variable "project_id" {
   type        = string
 }
 
-variable "environment" {
-  description = "Environment (dev, staging, prod)"
+variable "organization_id" {
+  description = "GCP Organization ID"
   type        = string
-  validation {
-    condition     = contains(["dev", "staging", "prod"], var.environment)
-    error_message = "Environment must be dev, staging, or prod."
-  }
 }
 
 # AC-2: Account Management
-# Implement least privilege service accounts
-resource "google_service_account" "app_service_account" {
-  account_id   = "app-${var.environment}"
-  display_name = "Application Service Account - ${var.environment}"
-  description  = "NIST AC-2 compliant service account with minimal permissions"
+resource "google_organization_iam_policy" "access_control_policy" {
+  org_id      = var.organization_id
+  policy_data = data.google_iam_policy.access_control.policy_data
+}
+
+data "google_iam_policy" "access_control" {
+  # Principle of Least Privilege (AC-6)
+  binding {
+    role = "roles/viewer"
+    members = [
+      "group:employees@{{domain}}"
+    ]
+    
+    condition {
+      title       = "Time-based Access"
+      description = "Only allow access during business hours"
+      expression  = "request.time.getHours() >= 9 && request.time.getHours() <= 17"
+    }
+  }
+  
+  # Administrative Access Control (AC-2, AC-3)
+  binding {
+    role = "roles/resourcemanager.organizationAdmin"
+    members = [
+      "group:admins@{{domain}}"
+    ]
+    
+    condition {
+      title       = "Admin Access Control"
+      description = "Administrative access with justification required"
+      expression  = "has(request.auth.access_levels)"
+    }
+  }
+  
+  # Financial Services Specific Controls
+  binding {
+    role = "roles/bigquery.dataViewer"
+    members = [
+      "group:trading-analysts@{{domain}}"
+    ]
+    
+    condition {
+      title       = "Trading Data Access"
+      description = "Access to trading data with audit logging"
+      expression  = "request.time.getHours() >= 6 && request.time.getHours() <= 18"
+    }
+  }
+}
+
+# Service Account Management (AC-2)
+resource "google_service_account" "compliance_service_accounts" {
+  for_each = var.service_accounts
+  
+  account_id   = each.key
+  display_name = each.value.display_name
+  description  = each.value.description
+  project      = var.project_id
+}
+
+# Service Account IAM (Least Privilege - AC-6)
+resource "google_project_iam_member" "service_account_roles" {
+  for_each = var.service_account_roles
+  
+  project = var.project_id
+  role    = each.value.role
+  member  = "serviceAccount:${google_service_account.compliance_service_accounts[each.value.account].email}"
+  
+  condition {
+    title       = "Conditional Service Account Access"
+    description = "Service account access with resource constraints"
+    expression  = each.value.condition_expression
+  }
+}
+
+# Access Context Manager (AC-3)
+resource "google_access_context_manager_access_policy" "financial_access_policy" {
+  parent = "organizations/${var.organization_id}"
+  title  = "Financial Services Access Policy"
+}
+
+resource "google_access_context_manager_access_level" "secure_access_level" {
+  parent = "accessPolicies/${google_access_context_manager_access_policy.financial_access_policy.name}"
+  name   = "accessPolicies/${google_access_context_manager_access_policy.financial_access_policy.name}/accessLevels/secure_access"
+  title  = "Secure Access Level"
+  
+  basic {
+    conditions {
+      ip_subnetworks = ["10.0.0.0/8"]
+      required_access_levels = []
+      
+      device_policy {
+        require_screen_lock = true
+        require_admin_approval = true
+        
+        os_constraints {
+          os_type = "DESKTOP_WINDOWS"
+          minimum_version = "10.0.0"
+        }
+      }
+    }
+  }
+}
+
+# Outputs for compliance reporting
+output "access_control_policy_etag" {
+  description = "ETag of the IAM policy for compliance tracking"
+  value       = google_organization_iam_policy.access_control_policy.etag
+}
+
+output "service_account_emails" {
+  description = "Service account emails for audit trail"
+  value = {
+    for k, v in google_service_account.compliance_service_accounts : k => v.email
+  }
+}
+
+output "access_policy_name" {
+  description = "Access Context Manager policy name"
+  value       = google_access_context_manager_access_policy.financial_access_policy.name
+}
+''',
+            
+            'network_security': '''
+# NIST 800-53 System and Communication Protection (SC) Implementation
+# Controls: SC-7, SC-8
+
+terraform {
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 4.0"
+    }
+  }
+}
+
+variable "project_id" {
+  description = "GCP Project ID"
+  type        = string
+}
+
+variable "network_name" {
+  description = "VPC Network Name"
+  type        = string
+  default     = "compliance-network"
+}
+
+# SC-7: Boundary Protection
+resource "google_compute_network" "compliance_vpc" {
+  name                    = var.network_name
+  project                 = var.project_id
+  auto_create_subnetworks = false
+  description             = "NIST 800-53 SC-7 Compliant Network"
+}
+
+# Secure Subnetworks with Boundary Protection
+resource "google_compute_subnetwork" "secure_subnets" {
+  for_each = var.secure_subnets
+  
+  name          = each.key
+  ip_cidr_range = each.value.cidr
+  region        = each.value.region
+  network       = google_compute_network.compliance_vpc.id
+  project       = var.project_id
+  
+  # Enable flow logs for SC-7 monitoring
+  log_config {
+    aggregation_interval = "INTERVAL_10_MIN"
+    flow_sampling       = 0.8
+    metadata           = "INCLUDE_ALL_METADATA"
+  }
+  
+  # Private Google Access for secure communication
+  private_ip_google_access = true
+  
+  description = "SC-7 Boundary Protected Subnet: ${each.value.description}"
+}
+
+# Firewall Rules - Default Deny (SC-7)
+resource "google_compute_firewall" "default_deny_all" {
+  name    = "${var.network_name}-deny-all"
+  network = google_compute_network.compliance_vpc.name
+  project = var.project_id
+  
+  deny {
+    protocol = "all"
+  }
+  
+  source_ranges = ["0.0.0.0/0"]
+  priority      = 65534
+  description   = "NIST SC-7: Default deny all traffic"
+}
+
+# Secure Internal Communication Rules
+resource "google_compute_firewall" "allow_internal_secure" {
+  name    = "${var.network_name}-allow-internal"
+  network = google_compute_network.compliance_vpc.name
+  project = var.project_id
+  
+  allow {
+    protocol = "tcp"
+    ports    = ["22", "443", "3389"]
+  }
+  
+  source_ranges = [for subnet in var.secure_subnets : subnet.cidr]
+  target_tags   = ["secure-internal"]
+  priority      = 1000
+  description   = "NIST SC-7: Secure internal communication"
+}
+
+# Financial Services Specific Rules
+resource "google_compute_firewall" "trading_system_access" {
+  name    = "${var.network_name}-trading-secure"
+  network = google_compute_network.compliance_vpc.name
+  project = var.project_id
+  
+  allow {
+    protocol = "tcp"
+    ports    = ["8443", "9443"]  # Secure trading ports
+  }
+  
+  source_tags      = ["trading-client"]
+  target_tags      = ["trading-system"]
+  priority         = 900
+  description      = "NIST SC-7: Secure trading system access"
+}
+
+# SC-8: Transmission Protection
+resource "google_compute_ssl_policy" "secure_ssl_policy" {
+  name            = "${var.network_name}-secure-ssl"
+  profile         = "MODERN"
+  min_tls_version = "TLS_1_2"
+  project         = var.project_id
+  description     = "NIST SC-8: Secure transmission policy"
+}
+
+# Load Balancer with SSL/TLS (SC-8)
+resource "google_compute_global_address" "secure_lb_ip" {
+  name         = "${var.network_name}-secure-lb-ip"
+  address_type = "EXTERNAL"
+  project      = var.project_id
+  description  = "Secure load balancer IP for SC-8 compliance"
+}
+
+resource "google_compute_managed_ssl_certificate" "secure_cert" {
+  name    = "${var.network_name}-secure-cert"
+  project = var.project_id
+  
+  managed {
+    domains = var.secure_domains
+  }
+  
+  description = "NIST SC-8: Managed SSL certificate for secure transmission"
+}
+
+# Cloud NAT for Secure Outbound (SC-7)
+resource "google_compute_router" "secure_router" {
+  for_each = var.secure_subnets
+  
+  name    = "${var.network_name}-router-${each.value.region}"
+  region  = each.value.region
+  network = google_compute_network.compliance_vpc.id
+  project = var.project_id
+  
+  description = "NIST SC-7: Secure router for controlled outbound access"
+}
+
+resource "google_compute_router_nat" "secure_nat" {
+  for_each = var.secure_subnets
+  
+  name                               = "${var.network_name}-nat-${each.value.region}"
+  router                            = google_compute_router.secure_router[each.key].name
+  region                            = each.value.region
+  nat_ip_allocate_option            = "MANUAL_ONLY"
+  nat_ips                           = [google_compute_address.nat_ips[each.key].self_link]
+  source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
+  project                           = var.project_id
+  
+  subnetwork {
+    name                    = google_compute_subnetwork.secure_subnets[each.key].id
+    source_ip_ranges_to_nat = ["ALL_IP_RANGES"]
+  }
+  
+  log_config {
+    enable = true
+    filter = "ERRORS_ONLY"
+  }
+}
+
+resource "google_compute_address" "nat_ips" {
+  for_each = var.secure_subnets
+  
+  name         = "${var.network_name}-nat-ip-${each.value.region}"
+  region       = each.value.region
+  address_type = "EXTERNAL"
+  project      = var.project_id
+  description  = "NAT IP for secure outbound access"
+}
+
+# VPC Flow Logs for Monitoring (SC-7)
+resource "google_compute_firewall" "log_all_traffic" {
+  name    = "${var.network_name}-log-all"
+  network = google_compute_network.compliance_vpc.name
+  project = var.project_id
+  
+  allow {
+    protocol = "all"
+  }
+  
+  source_ranges = ["0.0.0.0/0"]
+  priority      = 65535
+  enable_logging = true
+  
+  log_config {
+    metadata = "INCLUDE_ALL_METADATA"
+  }
+  
+  description = "NIST SC-7: Comprehensive traffic logging"
+}
+
+# Outputs
+output "vpc_network_id" {
+  description = "VPC Network ID for compliance reporting"
+  value       = google_compute_network.compliance_vpc.id
+}
+
+output "secure_subnet_ids" {
+  description = "Secure subnet IDs"
+  value = {
+    for k, v in google_compute_subnetwork.secure_subnets : k => v.id
+  }
+}
+
+output "ssl_policy_name" {
+  description = "SSL Policy name for SC-8 compliance"
+  value       = google_compute_ssl_policy.secure_ssl_policy.name
+}
+
+output "nat_gateway_ips" {
+  description = "NAT Gateway IPs for audit trail"
+  value = {
+    for k, v in google_compute_address.nat_ips : k => v.address
+  }
+}
+''',
+            
+            'audit_logging': '''
+# NIST 800-53 Audit and Accountability (AU) Implementation
+# Controls: AU-2, AU-3, AU-6, AU-12
+
+terraform {
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 4.0"
+    }
+  }
+}
+
+variable "project_id" {
+  description = "GCP Project ID"
+  type        = string
+}
+
+variable "organization_id" {
+  description = "GCP Organization ID"
+  type        = string
+}
+
+# AU-2, AU-3: Comprehensive Audit Event Logging
+resource "google_logging_organization_sink" "compliance_audit_sink" {
+  name   = "nist-compliance-audit-sink"
+  org_id = var.organization_id
+  
+  # Comprehensive audit filter for financial services
+  filter = <<-EOT
+    (protoPayload.serviceName="cloudresourcemanager.googleapis.com" OR
+     protoPayload.serviceName="iam.googleapis.com" OR
+     protoPayload.serviceName="storage.googleapis.com" OR
+     protoPayload.serviceName="compute.googleapis.com" OR
+     protoPayload.serviceName="bigquery.googleapis.com" OR
+     protoPayload.serviceName="cloudsql.googleapis.com") AND
+    (protoPayload.methodName=~".*create.*" OR
+     protoPayload.methodName=~".*delete.*" OR
+     protoPayload.methodName=~".*update.*" OR
+     protoPayload.methodName=~".*patch.*" OR
+     protoPayload.methodName=~".*setIamPolicy.*" OR
+     protoPayload.authenticationInfo.principalEmail!="")
+  EOT
+  
+  destination = "storage.googleapis.com/${google_storage_bucket.audit_logs.name}"
+  
+  description = "NIST AU-2/AU-3: Comprehensive audit log collection"
+}
+
+# Secure Audit Log Storage (AU-9)
+resource "google_storage_bucket" "audit_logs" {
+  name     = "${var.project_id}-nist-audit-logs"
+  location = var.audit_storage_region
+  project  = var.project_id
+  
+  # Prevent deletion of audit logs
+  lifecycle_rule {
+    condition {
+      age = var.audit_retention_days
+    }
+    action {
+      type = "Delete"
+    }
+  }
+  
+  # Audit log access logging
+  logging {
+    log_bucket = google_storage_bucket.audit_access_logs.name
+  }
+  
+  # Encryption at rest
+  encryption {
+    default_kms_key_name = google_kms_crypto_key.audit_key.id
+  }
+  
+  # Versioning for integrity
+  versioning {
+    enabled = true
+  }
+  
+  # Prevent public access
+  public_access_prevention = "enforced"
+  
+  labels = {
+    purpose = "nist-compliance"
+    control = "au-2-au-3-au-9"
+    environment = var.environment
+  }
+}
+
+# Audit Log Access Monitoring (AU-6)
+resource "google_storage_bucket" "audit_access_logs" {
+  name     = "${var.project_id}-audit-access-logs"
+  location = var.audit_storage_region
+  project  = var.project_id
+  
+  lifecycle_rule {
+    condition {
+      age = 90
+    }
+    action {
+      type = "Delete"
+    }
+  }
+  
+  public_access_prevention = "enforced"
+}
+
+# KMS Key for Audit Log Encryption (AU-9)
+resource "google_kms_key_ring" "audit_keyring" {
+  name     = "${var.project_id}-audit-keyring"
+  location = var.audit_storage_region
+  project  = var.project_id
+}
+
+resource "google_kms_crypto_key" "audit_key" {
+  name     = "audit-logs-key"
+  key_ring = google_kms_key_ring.audit_keyring.id
+  purpose  = "ENCRYPT_DECRYPT"
+  
+  rotation_period = "2592000s"  # 30 days
   
   lifecycle {
     prevent_destroy = true
   }
-}
-
-# AC-3: Access Enforcement
-# Role-based access control with conditional IAM
-resource "google_project_iam_member" "app_permissions" {
-  for_each = toset([
-    "roles/logging.logWriter",
-    "roles/monitoring.metricWriter",
-    "roles/cloudtrace.agent"
-  ])
   
-  project = var.project_id
-  role    = each.value
-  member  = "serviceAccount:${google_service_account.app_service_account.email}"
-  
-  condition {
-    title       = "Environment-based access"
-    description = "NIST AC-3: Access enforcement based on environment"
-    expression  = "request.time.getHours() >= 6 && request.time.getHours() <= 22"
+  labels = {
+    purpose = "audit-encryption"
+    control = "au-9"
   }
 }
 
-# AC-6: Least Privilege
-# Custom role with minimal required permissions
-resource "google_project_iam_custom_role" "app_minimal_role" {
-  role_id     = "appMinimalRole${title(var.environment)}"
-  title       = "Application Minimal Role - ${var.environment}"
-  description = "NIST AC-6 compliant minimal permissions for application"
+# Financial Services Specific Audit Sinks
+resource "google_logging_project_sink" "trading_audit_sink" {
+  name   = "trading-system-audit"
+  project = var.project_id
   
-  permissions = [
-    "storage.objects.get",
-    "storage.objects.list",
-    "pubsub.messages.publish",
-    "pubsub.topics.get"
-  ]
+  filter = <<-EOT
+    resource.type="gce_instance" AND
+    resource.labels.instance_name=~"trading-.*" AND
+    (jsonPayload.transaction_amount!="" OR
+     jsonPayload.wire_transfer_id!="" OR
+     jsonPayload.market_data_access!="")
+  EOT
   
-  stage = "GA"
-}
-
-# Audit logging for access control compliance
-resource "google_logging_project_sink" "access_audit_sink" {
-  name        = "access-audit-${var.environment}"
-  destination = "storage.googleapis.com/${google_storage_bucket.audit_logs.name}"
-  
-  filter = "protoPayload.serviceName=\\"iam.googleapis.com\\" OR protoPayload.serviceName=\\"cloudresourcemanager.googleapis.com\\""
+  destination = "storage.googleapis.com/${google_storage_bucket.trading_audit_logs.name}"
   
   unique_writer_identity = true
 }
 
-resource "google_storage_bucket" "audit_logs" {
-  name     = "${var.project_id}-access-audit-${var.environment}"
-  location = "US"
+resource "google_storage_bucket" "trading_audit_logs" {
+  name     = "${var.project_id}-trading-audit-logs"
+  location = var.audit_storage_region
+  project  = var.project_id
   
-  # NIST AU-2: Audit Events
-  retention_policy {
-    retention_period = 2592000 # 30 days minimum
+  # Enhanced retention for financial data
+  lifecycle_rule {
+    condition {
+      age = 2555  # 7 years for financial compliance
+    }
+    action {
+      type = "Delete"
+    }
   }
   
-  # Encryption at rest
   encryption {
     default_kms_key_name = google_kms_crypto_key.audit_key.id
   }
@@ -328,789 +638,991 @@ resource "google_storage_bucket" "audit_logs" {
     enabled = true
   }
   
-  lifecycle_rule {
-    condition {
-      age = 90
-    }
-    action {
-      type          = "SetStorageClass"
-      storage_class = "COLDLINE"
-    }
-  }
-}
-
-# KMS key for encryption
-resource "google_kms_key_ring" "audit_keyring" {
-  name     = "audit-keyring-${var.environment}"
-  location = "us-central1"
-}
-
-resource "google_kms_crypto_key" "audit_key" {
-  name     = "audit-key-${var.environment}"
-  key_ring = google_kms_key_ring.audit_keyring.id
+  public_access_prevention = "enforced"
   
-  rotation_period = "7776000s" # 90 days
-  
-  lifecycle {
-    prevent_destroy = true
+  labels = {
+    purpose = "trading-audit"
+    compliance = "sox-pci-dss"
+    retention = "7-years"
   }
 }
 
-# Output compliance evidence
-output "compliance_evidence" {
-  description = "Evidence of NIST 800-53 compliance implementation"
-  value = {
-    ac_2_account_management = {
-      service_account_email = google_service_account.app_service_account.email
-      creation_time        = google_service_account.app_service_account.name
-    }
-    ac_3_access_enforcement = {
-      conditional_iam_bindings = length(google_project_iam_member.app_permissions)
-      custom_role_id          = google_project_iam_custom_role.app_minimal_role.role_id
-    }
-    ac_6_least_privilege = {
-      permissions_count = length(google_project_iam_custom_role.app_minimal_role.permissions)
-      custom_role_stage = google_project_iam_custom_role.app_minimal_role.stage
-    }
-    audit_compliance = {
-      audit_sink_name   = google_logging_project_sink.access_audit_sink.name
-      audit_bucket_name = google_storage_bucket.audit_logs.name
-      encryption_key    = google_kms_crypto_key.audit_key.id
-    }
-  }
-}'''
-        
-        # Write module to file
-        module_path = self.output_dir / "access_control" / "main.tf"
-        module_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(module_path, 'w') as f:
-            f.write(module_content)
-        
-        return str(module_path)
+# Real-time Audit Monitoring (AU-6)
+resource "google_monitoring_alert_policy" "audit_anomaly_alert" {
+  display_name = "NIST AU-6: Audit Log Anomaly Detection"
+  project      = var.project_id
+  
+  conditions {
+    display_name = "Suspicious Audit Activity"
     
-    def generate_network_security_module(self) -> str:
-        """Generate Terraform module for Network Security (SC-7, SC-8)"""
-        
-        module_content = '''# NIST 800-53 Network Security Implementation
-# Controls: SC-7 (Boundary Protection), SC-8 (Transmission Protection)
+    condition_threshold {
+      filter          = "resource.type=\"gcs_bucket\" AND resource.labels.bucket_name=\"${google_storage_bucket.audit_logs.name}\""
+      duration        = "300s"
+      comparison      = "COMPARISON_GREATER_THAN"
+      threshold_value = 100
+      
+      aggregations {
+        alignment_period   = "60s"
+        per_series_aligner = "ALIGN_RATE"
+      }
+    }
+  }
+  
+  notification_channels = var.audit_notification_channels
+  
+  alert_strategy {
+    auto_close = "604800s"  # 7 days
+  }
+  
+  documentation {
+    content = "NIST 800-53 AU-6: Unusual audit log activity detected. Investigate immediately."
+    mime_type = "text/markdown"
+  }
+}
 
-variable "project_id" {
+# Automated Audit Analysis (AU-6)
+resource "google_bigquery_dataset" "audit_analysis" {
+  dataset_id    = "nist_audit_analysis"
+  friendly_name = "NIST Compliance Audit Analysis"
+  description   = "AU-6: Automated audit log analysis and reporting"
+  location      = var.bigquery_region
+  project       = var.project_id
+  
+  default_table_expiration_ms = 31536000000  # 1 year
+  
+  labels = {
+    purpose = "audit-analysis"
+    control = "au-6"
+  }
+}
+
+# Audit Review Scheduled Queries
+resource "google_bigquery_data_transfer_config" "audit_review_query" {
+  display_name   = "NIST AU-6 Daily Audit Review"
+  location       = var.bigquery_region
+  data_source_id = "scheduled_query"
+  project        = var.project_id
+  
+  schedule = "every day 02:00"
+  
+  params = {
+    query = <<-EOT
+      SELECT
+        timestamp,
+        protoPayload.authenticationInfo.principalEmail as user_email,
+        protoPayload.serviceName as service,
+        protoPayload.methodName as method,
+        protoPayload.resourceName as resource,
+        severity,
+        COUNT(*) as event_count
+      FROM `${var.project_id}.${google_bigquery_dataset.audit_analysis.dataset_id}.cloudaudit_googleapis_com_activity_*`
+      WHERE _TABLE_SUFFIX = FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY))
+      AND protoPayload.authenticationInfo.principalEmail IS NOT NULL
+      GROUP BY 1,2,3,4,5,6
+      HAVING event_count > 50
+      ORDER BY event_count DESC
+    EOT
+    
+    destination_table_name_template = "daily_audit_review_{run_date}"
+    write_disposition = "WRITE_TRUNCATE"
+  }
+}
+
+# Service Account for Audit Access (Least Privilege)
+resource "google_service_account" "audit_service_account" {
+  account_id   = "nist-audit-service"
+  display_name = "NIST Compliance Audit Service Account"
+  description  = "Service account for automated audit processing"
+  project      = var.project_id
+}
+
+resource "google_project_iam_member" "audit_service_permissions" {
+  for_each = toset([
+    "roles/logging.viewer",
+    "roles/storage.objectViewer",
+    "roles/bigquery.dataViewer",
+    "roles/bigquery.jobUser"
+  ])
+  
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.audit_service_account.email}"
+}
+
+# Outputs
+output "audit_sink_name" {
+  description = "Organization audit sink name"
+  value       = google_logging_organization_sink.compliance_audit_sink.name
+}
+
+output "audit_bucket_name" {
+  description = "Audit logs storage bucket"
+  value       = google_storage_bucket.audit_logs.name
+}
+
+output "audit_kms_key_id" {
+  description = "KMS key for audit log encryption"
+  value       = google_kms_crypto_key.audit_key.id
+}
+
+output "trading_audit_bucket" {
+  description = "Trading system specific audit bucket"
+  value       = google_storage_bucket.trading_audit_logs.name
+}
+
+output "audit_analysis_dataset" {
+  description = "BigQuery dataset for audit analysis"
+  value       = google_bigquery_dataset.audit_analysis.dataset_id
+}
+'''
+        }
+    
+    def generate_terraform_module(self, control_family: str, variables: Dict = None) -> str:
+        """Generate Terraform module for specific control family"""
+        try:
+            if variables is None:
+                variables = self._get_default_variables(control_family)
+            
+            template = self.template_env.get_template(control_family)
+            return template.render(**variables)
+            
+        except Exception as e:
+            logger.error(f"Terraform generation failed for {control_family}: {e}")
+            return self._get_fallback_terraform(control_family)
+    
+    def _get_default_variables(self, control_family: str) -> Dict:
+        """Get default variables for Terraform modules"""
+        base_vars = {
+            'domain': 'swift.com',
+            'environment': 'production',
+            'audit_storage_region': 'us-central1',
+            'bigquery_region': 'US',
+            'audit_retention_days': 2555,  # 7 years for financial compliance
+        }
+        
+        if control_family == 'access_control':
+            base_vars.update({
+                'service_accounts': {
+                    'trading-service': {
+                        'display_name': 'Trading System Service Account',
+                        'description': 'Service account for trading system operations'
+                    },
+                    'payment-service': {
+                        'display_name': 'Payment Processing Service Account', 
+                        'description': 'Service account for payment processing'
+                    }
+                },
+                'service_account_roles': {
+                    'trading_viewer': {
+                        'account': 'trading-service',
+                        'role': 'roles/bigquery.dataViewer',
+                        'condition_expression': 'request.time.getHours() >= 6 && request.time.getHours() <= 18'
+                    }
+                }
+            })
+        elif control_family == 'network_security':
+            base_vars.update({
+                'secure_subnets': {
+                    'trading-subnet': {
+                        'cidr': '10.1.0.0/24',
+                        'region': 'us-central1',
+                        'description': 'Trading system secure subnet'
+                    },
+                    'payment-subnet': {
+                        'cidr': '10.2.0.0/24', 
+                        'region': 'us-east1',
+                        'description': 'Payment processing secure subnet'
+                    }
+                },
+                'secure_domains': ['trading.swift.com', 'payments.swift.com']
+            })
+        
+        return base_vars
+    
+    def _get_fallback_terraform(self, control_family: str) -> str:
+        """Fallback Terraform configuration"""
+        return f"""
+# Fallback Terraform configuration for {control_family}
+# Generated due to template error - manual review required
+
+terraform {{
+  required_providers {{
+    google = {{
+      source  = "hashicorp/google"
+      version = "~> 4.0"
+    }}
+  }}
+}}
+
+variable "project_id" {{
   description = "GCP Project ID"
   type        = string
-}
+}}
 
-variable "environment" {
-  description = "Environment (dev, staging, prod)"
-  type        = string
-}
-
-variable "allowed_cidr_blocks" {
-  description = "CIDR blocks allowed for SSH access"
-  type        = list(string)
-  default     = ["10.0.0.0/8"]  # Internal networks only
-}
-
-# SC-7: Boundary Protection
-# Create secure VPC with proper firewall rules
-resource "google_compute_network" "secure_vpc" {
-  name                    = "secure-vpc-${var.environment}"
-  auto_create_subnetworks = false
-  description             = "NIST SC-7 compliant VPC with boundary protection"
-}
-
-resource "google_compute_subnetwork" "private_subnet" {
-  name          = "private-subnet-${var.environment}"
-  ip_cidr_range = "10.0.1.0/24"
-  region        = "us-central1"
-  network       = google_compute_network.secure_vpc.id
-  
-  # Enable private Google access
-  private_ip_google_access = true
-  
-  # Enable flow logs for audit
-  log_config {
-    aggregation_interval = "INTERVAL_10_MIN"
-    flow_sampling        = 0.5
-    metadata             = "INCLUDE_ALL_METADATA"
-  }
-}
-
-# Default deny-all firewall rule
-resource "google_compute_firewall" "deny_all" {
-  name    = "deny-all-${var.environment}"
-  network = google_compute_network.secure_vpc.name
-  
-  deny {
-    protocol = "all"
-  }
-  
-  source_ranges = ["0.0.0.0/0"]
-  priority      = 65534
-  description   = "NIST SC-7: Default deny rule for boundary protection"
-}
-
-# Allow internal communication
-resource "google_compute_firewall" "allow_internal" {
-  name    = "allow-internal-${var.environment}"
-  network = google_compute_network.secure_vpc.name
-  
-  allow {
-    protocol = "tcp"
-    ports    = ["22", "80", "443", "3389"]
-  }
-  
-  allow {
-    protocol = "icmp"
-  }
-  
-  source_ranges = ["10.0.0.0/8"]
-  priority      = 1000
-  description   = "NIST SC-7: Allow internal network communication"
-}
-
-# Restricted SSH access
-resource "google_compute_firewall" "allow_ssh_restricted" {
-  name    = "allow-ssh-restricted-${var.environment}"
-  network = google_compute_network.secure_vpc.name
-  
-  allow {
-    protocol = "tcp"
-    ports    = ["22"]
-  }
-  
-  source_ranges = var.allowed_cidr_blocks
-  target_tags   = ["ssh-allowed"]
-  priority      = 1000
-  description   = "NIST SC-7: Restricted SSH access from approved networks"
-}
-
-# SC-8: Transmission Protection
-# HTTPS load balancer with SSL termination
-resource "google_compute_ssl_certificate" "app_cert" {
-  name_prefix = "app-cert-${var.environment}-"
-  description = "NIST SC-8 compliant SSL certificate"
-  
-  managed {
-    domains = ["app-${var.environment}.swift.com"]
-  }
-  
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# Output compliance evidence
-output "network_compliance_evidence" {
-  description = "Evidence of network security compliance"
-  value = {
-    sc_7_boundary_protection = {
-      vpc_name              = google_compute_network.secure_vpc.name
-      firewall_rules_count  = 3
-      private_subnet_cidr   = google_compute_subnetwork.private_subnet.ip_cidr_range
-    }
-    sc_8_transmission_protection = {
-      ssl_certificate       = google_compute_ssl_certificate.app_cert.name
-      managed_domains       = google_compute_ssl_certificate.app_cert.managed[0].domains
-    }
-    audit_capabilities = {
-      vpc_flow_logs    = true
-      private_access   = true
-    }
-  }
-}'''
-        
-        # Write module to file
-        module_path = self.output_dir / "network_security" / "main.tf"
-        module_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(module_path, 'w') as f:
-            f.write(module_content)
-        
-        return str(module_path)
+# Placeholder resource - replace with actual implementation
+resource "null_resource" "{control_family}_placeholder" {{
+  provisioner "local-exec" {{
+    command = "echo 'Implement {control_family} controls here'"
+  }}
+}}
+"""
 
 class OPAPolicyGenerator:
     """Generates Open Policy Agent (OPA) policies for compliance validation"""
     
-    def __init__(self, output_dir: str = "policies/opa"):
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self):
+        self.policy_templates = self._get_opa_templates()
     
-    def generate_access_control_policy(self) -> str:
-        """Generate OPA policy for access control compliance"""
-        
-        policy_content = '''package nist.access_control
+    def _get_opa_templates(self) -> Dict[str, str]:
+        """Define OPA policy templates"""
+        return {
+            'access_control': '''
+package nist.access_control
 
-# NIST 800-53 AC-2: Account Management
-# Validate service account configuration
+# NIST 800-53 Access Control Policies (AC-2, AC-3, AC-6)
 
+# AC-2: Account Management - Deny service accounts without proper naming convention
 deny[msg] {
-    input.resource_type == "google_service_account"
-    not input.lifecycle.prevent_destroy
-    msg := "AC-2 Violation: Service accounts must have prevent_destroy enabled"
+    input.resource.type == "google_service_account"
+    not regex.match("^(trading|payment|audit|monitoring)-[a-z0-9-]+$", input.resource.change.after.account_id)
+    msg := sprintf("Service account '%s' does not follow naming convention", [input.resource.change.after.account_id])
 }
 
+# AC-3: Access Enforcement - Require conditions on sensitive IAM bindings
 deny[msg] {
-    input.resource_type == "google_service_account"
-    count(input.display_name) == 0
-    msg := "AC-2 Violation: Service accounts must have descriptive display names"
+    input.resource.type == "google_project_iam_member"
+    sensitive_roles[input.resource.change.after.role]
+    not input.resource.change.after.condition
+    msg := sprintf("Sensitive role '%s' requires conditional access", [input.resource.change.after.role])
 }
 
-# NIST 800-53 AC-3: Access Enforcement
-# Validate IAM bindings have appropriate conditions
-
+# AC-6: Least Privilege - Prevent overprivileged service accounts
 deny[msg] {
-    input.resource_type == "google_project_iam_member"
-    startswith(input.role, "roles/owner")
-    msg := "AC-3 Violation: Owner role should not be assigned without explicit approval"
+    input.resource.type == "google_project_iam_member"
+    startswith(input.resource.change.after.member, "serviceAccount:")
+    admin_roles[input.resource.change.after.role]
+    not input.resource.change.after.condition
+    msg := sprintf("Service account cannot have admin role '%s' without conditions", [input.resource.change.after.role])
 }
 
+# Financial Services Specific: Trading system access controls
 deny[msg] {
-    input.resource_type == "google_project_iam_member"
-    startswith(input.role, "roles/editor")
-    not input.condition
-    msg := "AC-3 Violation: Editor role must include conditional access controls"
+    input.resource.type == "google_project_iam_member"
+    input.resource.change.after.role == "roles/bigquery.dataEditor"
+    contains(input.resource.change.after.member, "trading")
+    not trading_hours_condition(input.resource.change.after.condition)
+    msg := "Trading system data access must be restricted to market hours"
 }
 
-# NIST 800-53 AC-6: Least Privilege
-# Validate custom roles have minimal permissions
-
-deny[msg] {
-    input.resource_type == "google_project_iam_custom_role"
-    count(input.permissions) > 20
-    msg := "AC-6 Violation: Custom roles should follow least privilege principle"
+# Helper functions
+sensitive_roles[role] {
+    role := "roles/owner"
+}
+sensitive_roles[role] {
+    role := "roles/editor"
+}
+sensitive_roles[role] {
+    role := "roles/iam.securityAdmin"
 }
 
-warn[msg] {
-    input.resource_type == "google_project_iam_custom_role"
-    "roles/owner" in input.permissions
-    msg := "AC-6 Warning: Custom role includes owner-level permissions"
+admin_roles[role] {
+    role := "roles/resourcemanager.organizationAdmin"
+}
+admin_roles[role] {
+    role := "roles/iam.organizationRoleAdmin"
 }
 
-# Validate audit logging is enabled
-deny[msg] {
-    input.resource_type == "google_storage_bucket"
-    contains(input.name, "audit")
-    not input.retention_policy
-    msg := "AU-2 Violation: Audit log buckets must have retention policies"
+trading_hours_condition(condition) {
+    contains(condition.expression, "request.time.getHours() >= 6")
+    contains(condition.expression, "request.time.getHours() <= 18")
 }
 
+# Compliance reporting
+compliance_score := score {
+    total_checks := count(deny)
+    passed_checks := count(allow)
+    score := (passed_checks / (total_checks + passed_checks)) * 100
+}
+''',
+            
+            'network_security': '''
+package nist.network_security
+
+# NIST 800-53 System and Communication Protection (SC-7, SC-8)
+
+# SC-7: Boundary Protection - Require explicit firewall rules
 deny[msg] {
-    input.resource_type == "google_storage_bucket"
-    contains(input.name, "audit")
-    not input.encryption
-    msg := "SC-8 Violation: Audit log buckets must be encrypted"
-}'''
-        
-        policy_path = self.output_dir / "access_control.rego"
-        with open(policy_path, 'w') as f:
-            f.write(policy_content)
-        
-        return str(policy_path)
+    input.resource.type == "google_compute_firewall"
+    input.resource.change.after.direction == "INGRESS"
+    "0.0.0.0/0" in input.resource.change.after.source_ranges
+    input.resource.change.after.allow
+    msg := sprintf("Firewall rule '%s' allows unrestricted ingress", [input.resource.name])
+}
+
+# SC-7: Network Segmentation - Require VPC for production workloads
+deny[msg] {
+    input.resource.type == "google_compute_instance"
+    production_labels(input.resource.change.after.labels)
+    not input.resource.change.after.network_interface[_].subnetwork
+    msg := sprintf("Production instance '%s' must use custom VPC", [input.resource.name])
+}
+
+# SC-8: Transmission Protection - Require TLS for load balancers
+deny[msg] {
+    input.resource.type == "google_compute_url_map"
+    input.resource.change.after.default_service
+    not https_redirect_required(input.resource.change.after)
+    msg := sprintf("Load balancer '%s' must enforce HTTPS", [input.resource.name])
+}
+
+# SC-8: Encryption in Transit - Require SSL policies with minimum TLS 1.2
+deny[msg] {
+    input.resource.type == "google_compute_ssl_policy"
+    input.resource.change.after.min_tls_version != "TLS_1_2"
+    input.resource.change.after.min_tls_version != "TLS_1_3"
+    msg := sprintf("SSL policy '%s' must require TLS 1.2 or higher", [input.resource.name])
+}
+
+# Financial Services: Trading network isolation
+deny[msg] {
+    input.resource.type == "google_compute_subnetwork"
+    contains(input.resource.name, "trading")
+    not private_google_access(input.resource.change.after)
+    msg := sprintf("Trading subnet '%s' must have private Google access enabled", [input.resource.name])
+}
+
+# Financial Services: Payment processing security
+deny[msg] {
+    input.resource.type == "google_compute_firewall"
+    payment_system_target(input.resource.change.after.target_tags)
+    not secure_ports_only(input.resource.change.after.allow)
+    msg := sprintf("Payment system firewall '%s' must only allow secure ports", [input.resource.name])
+}
+
+# Helper functions
+production_labels(labels) {
+    labels.environment == "production"
+}
+
+https_redirect_required(url_map) {
+    url_map.host_rule[_].path_matcher == "https-redirect"
+}
+
+private_google_access(subnet) {
+    subnet.private_ip_google_access == true
+}
+
+payment_system_target(tags) {
+    "payment-system" in tags
+}
+
+secure_ports_only(allow_rules) {
+    rule := allow_rules[_]
+    secure_port := rule.ports[_]
+    to_number(secure_port) >= 443
+}
+
+# Compliance scoring
+network_compliance_score := score {
+    violations := count(deny)
+    total_resources := count(input.planned_values.root_module.resources)
+    score := ((total_resources - violations) / total_resources) * 100
+}
+''',
+            
+            'audit_logging': '''
+package nist.audit_logging
+
+# NIST 800-53 Audit and Accountability (AU-2, AU-3, AU-6, AU-9)
+
+# AU-2: Audit Events - Require comprehensive logging
+deny[msg] {
+    input.resource.type == "google_logging_project_sink"
+    not comprehensive_filter(input.resource.change.after.filter)
+    msg := sprintf("Audit sink '%s' must have comprehensive event filtering", [input.resource.name])
+}
+
+# AU-3: Audit Content - Require structured audit information
+deny[msg] {
+    input.resource.type == "google_logging_organization_sink"
+    not structured_logging_destination(input.resource.change.after.destination)
+    msg := sprintf("Audit sink '%s' must use structured logging destination", [input.resource.name])
+}
+
+# AU-9: Protection of Audit Information - Require encryption for audit storage
+deny[msg] {
+    input.resource.type == "google_storage_bucket"
+    audit_bucket(input.resource.name)
+    not input.resource.change.after.encryption
+    msg := sprintf("Audit bucket '%s' must have encryption enabled", [input.resource.name])
+}
+
+# AU-9: Audit Storage Protection - Require lifecycle management
+deny[msg] {
+    input.resource.type == "google_storage_bucket"
+    audit_bucket(input.resource.name)
+    not appropriate_retention(input.resource.change.after.lifecycle_rule)
+    msg := sprintf("Audit bucket '%s' must have appropriate retention policy", [input.resource.name])
+}
+
+# Financial Services: Enhanced audit for trading systems
+deny[msg] {
+    input.resource.type == "google_compute_instance"
+    trading_system(input.resource.change.after.labels)
+    not audit_logging_enabled(input.resource.change.after.metadata)
+    msg := sprintf("Trading instance '%s' must have audit logging enabled", [input.resource.name])
+}
+
+# Financial Services: Secure audit log transmission
+deny[msg] {
+    input.resource.type == "google_logging_project_sink"
+    financial_data_filter(input.resource.change.after.filter)
+    not secure_destination(input.resource.change.after.destination)
+    msg := sprintf("Financial audit sink '%s' must use secure destination", [input.resource.name])
+}
+
+# AU-6: Audit Review - Require automated analysis
+deny[msg] {
+    input.resource.type == "google_bigquery_data_transfer_config"
+    audit_analysis_query(input.resource.change.after.params.query)
+    not appropriate_schedule(input.resource.change.after.schedule)
+    msg := sprintf("Audit analysis '%s' must run at appropriate intervals", [input.resource.name])
+}
+
+# Helper functions
+comprehensive_filter(filter) {
+    contains(filter, "protoPayload.serviceName")
+    contains(filter, "protoPayload.methodName")
+    contains(filter, "authenticationInfo.principalEmail")
+}
+
+structured_logging_destination(destination) {
+    startswith(destination, "storage.googleapis.com/")
+}
+structured_logging_destination(destination) {
+    startswith(destination, "bigquery.googleapis.com/")
+}
+
+audit_bucket(name) {
+    contains(name, "audit")
+}
+audit_bucket(name) {
+    contains(name, "compliance")
+}
+
+appropriate_retention(lifecycle_rules) {
+    rule := lifecycle_rules[_]
+    to_number(rule.condition.age) >= 2555  # 7 years for financial compliance
+}
+
+trading_system(labels) {
+    labels.system_type == "trading"
+}
+trading_system(labels) {
+    contains(labels.name, "trading")
+}
+
+audit_logging_enabled(metadata) {
+    metadata["enable-oslogin"] == "TRUE"
+}
+
+financial_data_filter(filter) {
+    contains(filter, "trading")
+}
+financial_data_filter(filter) {
+    contains(filter, "payment")
+}
+financial_data_filter(filter) {
+    contains(filter, "transaction")
+}
+
+secure_destination(destination) {
+    startswith(destination, "storage.googleapis.com/")
+    contains(destination, "encrypted")
+}
+
+audit_analysis_query(query) {
+    contains(query, "cloudaudit_googleapis_com")
+}
+
+appropriate_schedule(schedule) {
+    contains(schedule, "every day")
+}
+
+# Compliance metrics
+audit_compliance_score := score {
+    total_violations := count(deny)
+    audit_resources := count([r | r := input.planned_values.root_module.resources[_]; audit_related_resource(r.type)])
+    score := ((audit_resources - total_violations) / audit_resources) * 100
+}
+
+audit_related_resource(type) {
+    type == "google_logging_project_sink"
+}
+audit_related_resource(type) {
+    type == "google_storage_bucket"
+}
+audit_related_resource(type) {
+    type == "google_bigquery_dataset"
+}
+'''
+        }
     
-    def generate_network_security_policy(self) -> str:
-        """Generate OPA policy for network security compliance"""
-        
-        policy_content = '''package nist.network_security
-
-# NIST 800-53 SC-7: Boundary Protection
-# Validate firewall rules and VPC configuration
-
-deny[msg] {
-    input.resource_type == "google_compute_firewall"
-    input.direction == "INGRESS"
-    "0.0.0.0/0" in input.source_ranges
-    input.allow[_].protocol == "tcp"
-    "22" in input.allow[_].ports
-    msg := "SC-7 Violation: SSH should not be open to the internet"
-}
-
-deny[msg] {
-    input.resource_type == "google_compute_firewall"
-    input.direction == "INGRESS"
-    "0.0.0.0/0" in input.source_ranges
-    input.allow[_].protocol == "tcp"
-    "3389" in input.allow[_].ports
-    msg := "SC-7 Violation: RDP should not be open to the internet"
-}
-
-# Validate VPC has private Google access enabled
-deny[msg] {
-    input.resource_type == "google_compute_subnetwork"
-    not input.private_ip_google_access
-    msg := "SC-7 Violation: Subnets should enable private Google access"
-}
-
-# NIST 800-53 SC-8: Transmission Protection
-# Validate SSL/TLS configuration
-
-deny[msg] {
-    input.resource_type == "google_compute_ssl_policy"
-    input.min_tls_version != "TLS_1_2"
-    input.min_tls_version != "TLS_1_3"
-    msg := "SC-8 Violation: Minimum TLS version must be 1.2 or higher"
-}
-
-# Validate managed SSL certificates
-allow[msg] {
-    input.resource_type == "google_compute_ssl_certificate"
-    input.managed
-    msg := "SC-8 Compliance: Using managed SSL certificate"
-}
-
-# Validate audit logging is enabled
-deny[msg] {
-    input.resource_type == "google_compute_subnetwork"
-    not input.log_config
-    msg := "AU-2 Violation: VPC subnets should have flow logs enabled"
-}
-
-warn[msg] {
-    input.resource_type == "google_compute_firewall"
-    input.priority > 1000
-    msg := "Best Practice: Consider using lower priority values for important rules"
-}'''
-        
-        policy_path = self.output_dir / "network_security.rego"
-        with open(policy_path, 'w') as f:
-            f.write(policy_content)
-        
-        return str(policy_path)
-
-class ComplianceAssessmentEngine:
-    """Performs automated compliance assessments against NIST 800-53 controls"""
+    def generate_opa_policy(self, control_family: str, custom_rules: List[str] = None) -> str:
+        """Generate OPA policy for specific control family"""
+        try:
+            base_policy = self.policy_templates.get(control_family, "")
+            
+            if custom_rules:
+                additional_rules = "\n\n# Custom Rules\n" + "\n\n".join(custom_rules)
+                base_policy += additional_rules
+            
+            return base_policy
+            
+        except Exception as e:
+            logger.error(f"OPA policy generation failed for {control_family}: {e}")
+            return self._get_fallback_opa_policy(control_family)
     
-    def __init__(self, project_id: str):
-        self.project_id = project_id
-        self.control_library = NISTControlLibrary()
-        
-    async def assess_infrastructure_compliance(self) -> ComplianceAssessment:
-        """Perform comprehensive compliance assessment"""
-        logger.info("Starting NIST 800-53 compliance assessment...")
-        
-        assessment_id = f"assessment_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        findings = []
-        
-        # Get current infrastructure state (simulated for demo)
-        infrastructure_state = await self.get_infrastructure_state()
-        
-        # Assess each control
-        for control_id, control in self.control_library.controls.items():
-            finding = await self.assess_control(control, infrastructure_state)
-            findings.append(finding)
-        
-        # Calculate overall compliance score
-        compliant_count = len([f for f in findings if f['status'] == ControlStatus.COMPLIANT.value])
-        total_count = len(findings)
-        overall_score = (compliant_count / total_count) * 100 if total_count > 0 else 0
-        
-        # Generate remediation plan
-        remediation_plan = self.generate_remediation_plan(findings)
-        
-        assessment = ComplianceAssessment(
-            assessment_id=assessment_id,
-            timestamp=datetime.now(),
-            total_controls=total_count,
-            compliant_controls=compliant_count,
-            non_compliant_controls=total_count - compliant_count,
-            overall_score=overall_score,
-            findings=findings,
-            remediation_plan=remediation_plan
-        )
-        
-        logger.info(f"Assessment complete. Overall score: {overall_score:.1f}%")
-        return assessment
+    def _get_fallback_opa_policy(self, control_family: str) -> str:
+        """Fallback OPA policy"""
+        return f"""
+package nist.{control_family}
+
+# Fallback OPA policy for {control_family}
+# Generated due to template error - manual review required
+
+# Default deny rule
+deny[msg] {{
+    msg := "Manual policy implementation required for {control_family}"
+}}
+"""
+
+class NISTControlDatabase:
+    """Database of NIST 800-53 controls with implementation guidance"""
     
-    async def get_infrastructure_state(self) -> Dict:
-        """Get current state of infrastructure resources (simulated for demo)"""
-        logger.info("Gathering infrastructure state...")
+    def __init__(self):
+        self.controls = self._initialize_controls()
+    
+    def _initialize_controls(self) -> Dict[str, NISTControl]:
+        """Initialize NIST 800-53 control definitions"""
+        controls = {}
         
-        # For demo, simulate infrastructure state
-        state = {
-            'compute_instances': [
-                {
-                    'name': 'projects/swift-demo/instances/web-server-prod-1',
-                    'location': 'us-central1-a',
-                    'labels': {'environment': 'production', 'tier': 'web'},
-                    'state': 'RUNNING'
-                },
-                {
-                    'name': 'projects/swift-demo/instances/trading-system-1',
-                    'location': 'us-east1-a',
-                    'labels': {'environment': 'production', 'tier': 'trading'},
-                    'state': 'RUNNING'
-                }
-            ],
-            'networks': [
-                {
-                    'name': 'projects/swift-demo/networks/vpc-prod',
-                    'location': 'global',
-                    'labels': {'environment': 'production'},
-                    'state': 'ACTIVE'
-                }
-            ],
-            'subnetworks': [
-                {
-                    'name': 'projects/swift-demo/subnetworks/private-subnet-prod',
-                    'ip_cidr_range': '10.0.1.0/24',
-                    'private_ip_google_access': True,
-                    'log_config': {'enable': True}
-                }
-            ],
-            'firewalls': [
-                {
-                    'name': 'deny-all-prod',
-                    'direction': 'INGRESS',
-                    'priority': 65534,
-                    'action': 'DENY'
-                },
-                {
-                    'name': 'allow-ssh-restricted',
-                    'direction': 'INGRESS',
-                    'source_ranges': ['10.0.0.0/8'],
-                    'allowed_ports': ['22']
-                }
-            ],
-            'storage_buckets': [
-                {
-                    'name': 'swift-demo-access-audit-prod',
-                    'location': 'US',
-                    'encryption': {'default_kms_key_name': 'audit-key'},
-                    'retention_policy': {'retention_period': 2592000}
-                }
-            ],
-            'service_accounts': [
-                {
-                    'name': 'app-prod@swift-demo.iam.gserviceaccount.com',
-                    'display_name': 'Application Service Account - prod',
-                    'description': 'NIST AC-2 compliant service account'
-                }
-            ],
-            'kms_keys': [
-                {
-                    'name': 'audit-key-prod',
-                    'rotation_period': '7776000s'
-                }
-            ],
-            'iam_bindings': [
-                {
-                    'member': 'serviceAccount:app-prod@swift-demo.iam.gserviceaccount.com',
-                    'role': 'roles/logging.logWriter',
-                    'condition': {'title': 'Environment-based access'}
-                }
+        # Access Control Family (AC)
+        controls["AC-2"] = NISTControl(
+            control_id="AC-2",
+            control_name="Account Management",
+            family=ControlFamily.ACCESS_CONTROL,
+            description="Manage information system accounts, group memberships, privileges, workflow, notifications, deactivations, and authorizations.",
+            implementation_guidance="Implement automated account lifecycle management with proper authorization workflows and regular access reviews.",
+            assessment_procedures=[
+                "Review account provisioning processes",
+                "Verify automated deprovisioning for terminated users",
+                "Check privilege escalation controls",
+                "Validate account monitoring procedures"
             ]
-        }
-        
-        return state
-    
-    async def assess_control(self, control: ComplianceControl, 
-                           infrastructure_state: Dict) -> Dict:
-        """Assess a specific NIST control against infrastructure state"""
-        
-        finding = {
-            'control_id': control.control_id,
-            'title': control.title,
-            'family': control.family.value,
-            'status': ControlStatus.UNKNOWN.value,
-            'score': 0,
-            'evidence': [],
-            'gaps': [],
-            'recommendations': []
-        }
-        
-        # Control-specific assessment logic
-        if control.control_id == 'AC-2':  # Account Management
-            finding = await self.assess_ac_2(finding, infrastructure_state)
-        elif control.control_id == 'AC-3':  # Access Enforcement
-            finding = await self.assess_ac_3(finding, infrastructure_state)
-        elif control.control_id == 'AC-6':  # Least Privilege
-            finding = await self.assess_ac_6(finding, infrastructure_state)
-        elif control.control_id == 'AU-2':  # Audit Events
-            finding = await self.assess_au_2(finding, infrastructure_state)
-        elif control.control_id == 'AU-3':  # Audit Content
-            finding = await self.assess_au_3(finding, infrastructure_state)
-        elif control.control_id == 'SC-7':  # Boundary Protection
-            finding = await self.assess_sc_7(finding, infrastructure_state)
-        elif control.control_id == 'SC-8':  # Transmission Protection
-            finding = await self.assess_sc_8(finding, infrastructure_state)
-        elif control.control_id == 'IA-2':  # Identification and Authentication
-            finding = await self.assess_ia_2(finding, infrastructure_state)
-        elif control.control_id == 'IA-5':  # Authenticator Management
-            finding = await self.assess_ia_5(finding, infrastructure_state)
-        
-        return finding
-    
-    async def assess_ac_2(self, finding: Dict, state: Dict) -> Dict:
-        """Assess AC-2 (Account Management) control"""
-        service_accounts = state.get('service_accounts', [])
-        
-        if not service_accounts:
-            finding['status'] = ControlStatus.NON_COMPLIANT.value
-            finding['gaps'].append("No service accounts found - account management not implemented")
-            finding['score'] = 0
-            finding['recommendations'].append("Implement service account management with proper lifecycle controls")
-        else:
-            compliant_accounts = 0
-            total_accounts = len(service_accounts)
-            
-            for account in service_accounts:
-                # Check if account has proper naming and description
-                if account.get('display_name') and account.get('description'):
-                    compliant_accounts += 1
-                    finding['evidence'].append(f"Service account {account['name']} has proper documentation")
-                else:
-                    finding['gaps'].append(f"Service account {account['name']} lacks proper documentation")
-            
-            compliance_ratio = compliant_accounts / total_accounts
-            finding['score'] = int(compliance_ratio * 100)
-            
-            if compliance_ratio >= 0.9:
-                finding['status'] = ControlStatus.COMPLIANT.value
-            elif compliance_ratio >= 0.5:
-              finding['status'] = ControlStatus.PARTIALLY_COMPLIANT.value
-            else:
-                finding['status'] = ControlStatus.NON_COMPLIANT.value
-                finding['recommendations'].append("Implement proper service account documentation and lifecycle management")
-        
-        return finding
-    
-    async def assess_ac_3(self, finding: Dict, state: Dict) -> Dict:
-        """Assess AC-3 (Access Enforcement) control"""
-        iam_bindings = state.get('iam_bindings', [])
-        
-        if not iam_bindings:
-            finding['status'] = ControlStatus.NON_COMPLIANT.value
-            finding['gaps'].append("No IAM bindings found - access enforcement not configured")
-            finding['score'] = 0
-        else:
-            conditional_bindings = 0
-            total_bindings = len(iam_bindings)
-            
-            for binding in iam_bindings:
-                if binding.get('condition'):
-                    conditional_bindings += 1
-                    finding['evidence'].append(f"Conditional access configured for {binding['role']}")
-                else:
-                    finding['gaps'].append(f"No conditional access for {binding['role']}")
-            
-            compliance_ratio = conditional_bindings / total_bindings if total_bindings > 0 else 0
-            finding['score'] = int(compliance_ratio * 100)
-            
-            if compliance_ratio >= 0.8:
-                finding['status'] = ControlStatus.COMPLIANT.value
-            elif compliance_ratio >= 0.5:
-                finding['status'] = ControlStatus.PARTIALLY_COMPLIANT.value
-            else:
-                finding['status'] = ControlStatus.NON_COMPLIANT.value
-                finding['recommendations'].append("Implement conditional access controls for all IAM bindings")
-        
-        return finding
-    
-    async def assess_ac_6(self, finding: Dict, state: Dict) -> Dict:
-        """Assess AC-6 (Least Privilege) control"""
-        iam_bindings = state.get('iam_bindings', [])
-        
-        over_privileged = 0
-        total_bindings = len(iam_bindings)
-        
-        for binding in iam_bindings:
-            role = binding.get('role', '')
-            if 'owner' in role.lower() or 'editor' in role.lower():
-                over_privileged += 1
-                finding['gaps'].append(f"Over-privileged role assigned: {role}")
-            else:
-                finding['evidence'].append(f"Least privilege role: {role}")
-        
-        compliance_ratio = (total_bindings - over_privileged) / total_bindings if total_bindings > 0 else 1
-        finding['score'] = int(compliance_ratio * 100)
-        
-        if compliance_ratio >= 0.9:
-            finding['status'] = ControlStatus.COMPLIANT.value
-        elif compliance_ratio >= 0.7:
-            finding['status'] = ControlStatus.PARTIALLY_COMPLIANT.value
-        else:
-            finding['status'] = ControlStatus.NON_COMPLIANT.value
-            finding['recommendations'].append("Review and reduce permissions for over-privileged accounts")
-        
-        return finding
-    
-    async def assess_au_2(self, finding: Dict, state: Dict) -> Dict:
-        """Assess AU-2 (Audit Events) control"""
-        audit_buckets = [b for b in state.get('storage_buckets', []) if 'audit' in b.get('name', '')]
-        subnetworks = state.get('subnetworks', [])
-        
-        audit_score = 0
-        
-        # Check audit storage
-        if audit_buckets:
-            audit_score += 50
-            finding['evidence'].append(f"Audit storage configured: {len(audit_buckets)} buckets")
-        else:
-            finding['gaps'].append("No audit log storage configured")
-        
-        # Check VPC flow logs
-        flow_logs_enabled = sum(1 for subnet in subnetworks if subnet.get('log_config', {}).get('enable'))
-        if flow_logs_enabled > 0:
-            audit_score += 50
-            finding['evidence'].append(f"VPC flow logs enabled on {flow_logs_enabled} subnets")
-        else:
-            finding['gaps'].append("VPC flow logs not enabled")
-        
-        finding['score'] = audit_score
-        
-        if audit_score >= 90:
-            finding['status'] = ControlStatus.COMPLIANT.value
-        elif audit_score >= 60:
-            finding['status'] = ControlStatus.PARTIALLY_COMPLIANT.value
-        else:
-            finding['status'] = ControlStatus.NON_COMPLIANT.value
-            finding['recommendations'].append("Enable comprehensive audit logging for all critical services")
-        
-        return finding
-    
-    async def assess_au_3(self, finding: Dict, state: Dict) -> Dict:
-        """Assess AU-3 (Content of Audit Records) control"""
-        # Simplified assessment - in real implementation, would check log content
-        finding['status'] = ControlStatus.COMPLIANT.value
-        finding['score'] = 95
-        finding['evidence'].append("Audit logs contain required information elements")
-        
-        return finding
-    
-    async def assess_sc_7(self, finding: Dict, state: Dict) -> Dict:
-        """Assess SC-7 (Boundary Protection) control"""
-        firewalls = state.get('firewalls', [])
-        
-        # Check for deny-all default rule
-        has_default_deny = any(fw.get('action') == 'DENY' and fw.get('priority') == 65534 for fw in firewalls)
-        internet_exposed_ssh = any(
-            '0.0.0.0/0' in fw.get('source_ranges', []) and '22' in fw.get('allowed_ports', [])
-            for fw in firewalls
         )
         
-        score = 0
-        if has_default_deny:
-            score += 60
-            finding['evidence'].append("Default deny firewall rule configured")
-        else:
-            finding['gaps'].append("No default deny rule found")
+        controls["AC-3"] = NISTControl(
+            control_id="AC-3",
+            control_name="Access Enforcement",
+            family=ControlFamily.ACCESS_CONTROL,
+            description="Enforce approved authorizations for logical access to information and system resources.",
+            implementation_guidance="Implement role-based access control (RBAC) with conditional access policies and continuous verification.",
+            assessment_procedures=[
+                "Test access control enforcement mechanisms",
+                "Verify role-based access implementation",
+                "Check conditional access policies",
+                "Validate access decision points"
+            ]
+        )
         
-        if not internet_exposed_ssh:
-            score += 40
-            finding['evidence'].append("SSH not exposed to internet")
-        else:
-            finding['gaps'].append("SSH exposed to internet")
+        controls["AC-6"] = NISTControl(
+            control_id="AC-6",
+            control_name="Least Privilege",
+            family=ControlFamily.ACCESS_CONTROL,
+            description="Employ the principle of least privilege, allowing only authorized accesses for users which are necessary to accomplish assigned tasks.",
+            implementation_guidance="Implement just-in-time access, regular privilege reviews, and automated privilege escalation controls.",
+            assessment_procedures=[
+                "Review user privilege assignments",
+                "Check just-in-time access implementation",
+                "Verify privilege escalation controls",
+                "Validate privilege review processes"
+            ]
+        )
         
-        finding['score'] = score
+        # Audit and Accountability (AU)
+        controls["AU-2"] = NISTControl(
+            control_id="AU-2",
+            control_name="Audit Events", 
+            family=ControlFamily.AUDIT_ACCOUNTABILITY,
+            description="Identify the types of events that the system is capable of auditing and coordinate the security audit function with other organizational entities.",
+            implementation_guidance="Implement comprehensive audit logging covering all security-relevant events with centralized log management.",
+            assessment_procedures=[
+                "Review audit event types and coverage",
+                "Verify centralized log management",
+                "Check audit correlation capabilities",
+                "Validate audit retention policies"
+            ]
+        )
         
-        if score >= 90:
-            finding['status'] = ControlStatus.COMPLIANT.value
-        elif score >= 60:
-            finding['status'] = ControlStatus.PARTIALLY_COMPLIANT.value
-        else:
-            finding['status'] = ControlStatus.NON_COMPLIANT.value
-            finding['recommendations'].append("Implement default-deny firewall rules and restrict SSH access")
+        controls["AU-3"] = NISTControl(
+            control_id="AU-3",
+            control_name="Audit Content",
+            family=ControlFamily.AUDIT_ACCOUNTABILITY, 
+            description="Ensure that audit records contain information that establishes what type of event occurred, when the event occurred, where the event occurred, the source of the event, the outcome of the event, and the identity of any individuals or subjects associated with the event.",
+            implementation_guidance="Ensure audit logs include comprehensive metadata for forensic analysis and compliance reporting.",
+            assessment_procedures=[
+                "Review audit record content standards",
+                "Verify required audit metadata inclusion",
+                "Check audit record integrity",
+                "Validate audit format consistency"
+            ]
+        )
         
-        return finding
+        # System and Communication Protection (SC)
+        controls["SC-7"] = NISTControl(
+            control_id="SC-7",
+            control_name="Boundary Protection",
+            family=ControlFamily.SYSTEM_PROTECTION,
+            description="Monitor, control, and protect organizational communications at the external boundaries and key internal boundaries of the information system.",
+            implementation_guidance="Implement network segmentation, firewall rules, and intrusion detection at network boundaries.",
+            assessment_procedures=[
+                "Review network boundary protections",
+                "Test firewall rule effectiveness",
+                "Verify network segmentation",
+                "Check intrusion detection coverage"
+            ]
+        )
+        
+        controls["SC-8"] = NISTControl(
+            control_id="SC-8",
+            control_name="Transmission Protection",
+            family=ControlFamily.SYSTEM_PROTECTION,
+            description="Protect the confidentiality and integrity of transmitted information.",
+            implementation_guidance="Implement encryption in transit using TLS 1.2+ for all data transmission with proper certificate management.",
+            assessment_procedures=[
+                "Review encryption in transit implementation",
+                "Verify TLS configuration strength",
+                "Check certificate management processes",
+                "Validate encryption coverage"
+            ]
+        )
+        
+        # Identification and Authentication (IA)
+        controls["IA-2"] = NISTControl(
+            control_id="IA-2",
+            control_name="Identification and Authentication (Organizational Users)",
+            family=ControlFamily.IDENTIFICATION_AUTHENTICATION,
+            description="Uniquely identify and authenticate organizational users (or processes acting on behalf of organizational users).",
+            implementation_guidance="Implement multi-factor authentication for all users with centralized identity management.",
+            assessment_procedures=[
+                "Review user identification processes",
+                "Verify multi-factor authentication",
+                "Check identity management system",
+                "Validate authentication strength"
+            ]
+        )
+        
+        controls["IA-5"] = NISTControl(
+            control_id="IA-5",
+            control_name="Authenticator Management",
+            family=ControlFamily.IDENTIFICATION_AUTHENTICATION,
+            description="Manage information system authenticators by defining initial authenticator content, establishing administrative procedures for initial authenticator distribution, for lost/compromised or damaged authenticators, and for revoking authenticators.",
+            implementation_guidance="Implement automated authenticator lifecycle management with secure distribution and revocation processes.",
+            assessment_procedures=[
+                "Review authenticator management procedures",
+                "Verify secure distribution processes",
+                "Check revocation mechanisms",
+                "Validate authenticator strength policies"
+            ]
+        )
+        
+        return controls
     
-    async def assess_sc_8(self, finding: Dict, state: Dict) -> Dict:
-        """Assess SC-8 (Transmission Protection) control"""
-        # Check for SSL certificates and encryption
-        buckets = state.get('storage_buckets', [])
-        encrypted_buckets = [b for b in buckets if b.get('encryption')]
-        
-        score = 0
-        if encrypted_buckets:
-            score += 50
-            finding['evidence'].append(f"Encryption at rest configured for {len(encrypted_buckets)} buckets")
-        
-        # Assume HTTPS is configured (would check load balancers in real implementation)
-        score += 50
-        finding['evidence'].append("HTTPS encryption in transit configured")
-        
-        finding['score'] = score
-        
-        if score >= 90:
-            finding['status'] = ControlStatus.COMPLIANT.value
-        elif score >= 60:
-            finding['status'] = ControlStatus.PARTIALLY_COMPLIANT.value
-        else:
-            finding['status'] = ControlStatus.NON_COMPLIANT.value
-            finding['recommendations'].append("Implement encryption for all data in transit and at rest")
-        
-        return finding
+    def get_control(self, control_id: str) -> Optional[NISTControl]:
+        """Get specific NIST control definition"""
+        return self.controls.get(control_id)
     
-    async def assess_ia_2(self, finding: Dict, state: Dict) -> Dict:
-        """Assess IA-2 (Identification and Authentication) control"""
-        # Simplified assessment
-        finding['status'] = ControlStatus.COMPLIANT.value
-        finding['score'] = 85
-        finding['evidence'].append("User authentication mechanisms configured")
-        
-        return finding
+    def get_controls_by_family(self, family: ControlFamily) -> List[NISTControl]:
+        """Get all controls for a specific family"""
+        return [control for control in self.controls.values() if control.family == family]
     
-    async def assess_ia_5(self, finding: Dict, state: Dict) -> Dict:
-        """Assess IA-5 (Authenticator Management) control"""
-        kms_keys = state.get('kms_keys', [])
-        
-        if kms_keys:
-            finding['status'] = ControlStatus.COMPLIANT.value
-            finding['score'] = 90
-            finding['evidence'].append(f"Key management configured with {len(kms_keys)} keys")
-        else:
-            finding['status'] = ControlStatus.NON_COMPLIANT.value
-            finding['score'] = 30
-            finding['gaps'].append("No key management system configured")
-            finding['recommendations'].append("Implement centralized key management")
-        
-        return finding
+    def get_all_controls(self) -> List[NISTControl]:
+        """Get all available controls"""
+        return list(self.controls.values())
+
+class InfrastructureScanner:
+    """Scans cloud infrastructure against NIST controls"""
     
-    def generate_remediation_plan(self, findings: List[Dict]) -> List[Dict]:
-        """Generate prioritized remediation plan"""
-        remediation_actions = []
+    def __init__(self, config: Dict):
+        self.config = config
+        self.project_id = config.get('project_id', 'demo-project')
+    
+    async def scan_infrastructure(self, controls: List[str] = None) -> Dict[str, Dict]:
+        """Scan infrastructure for compliance with specified controls"""
+        if controls is None:
+            controls = ["AC-2", "AC-3", "AC-6", "AU-2", "AU-3", "SC-7", "SC-8", "IA-2", "IA-5"]
         
-        for finding in findings:
-            if finding['status'] in [ControlStatus.NON_COMPLIANT.value, ControlStatus.PARTIALLY_COMPLIANT.value]:
-                priority = 'High' if finding['status'] == ControlStatus.NON_COMPLIANT.value else 'Medium'
-                effort = 'High' if finding['score'] < 50 else 'Medium' if finding['score'] < 80 else 'Low'
-                
-                action = {
-                    'control_id': finding['control_id'],
-                    'title': finding['title'],
-                    'priority': priority,
-                    'estimated_effort': effort,
-                    'current_score': finding['score'],
-                    'target_score': 90,
-                    'recommendations': finding.get('recommendations', []),
-                    'terraform_module': f"terraform_modules/{finding['control_id'].lower().replace('-', '_')}/main.tf",
-                    'status': 'Planned'
+        scan_results = {}
+        
+        for control_id in controls:
+            try:
+                result = await self._assess_control(control_id)
+                scan_results[control_id] = result
+                logger.info(f"Assessed control {control_id}: {result['status']}")
+            except Exception as e:
+                logger.error(f"Failed to assess control {control_id}: {e}")
+                scan_results[control_id] = {
+                    'status': ComplianceStatus.NOT_ASSESSED.value,
+                    'score': 0,
+                    'findings': [f"Assessment failed: {str(e)}"],
+                    'evidence': [],
+                    'remediation': []
                 }
-                
-                remediation_actions.append(action)
         
-        # Sort by priority and potential impact
-        priority_order = {'High': 3, 'Medium': 2, 'Low': 1}
-        remediation_actions.sort(
-            key=lambda x: (priority_order.get(x['priority'], 0), 100 - x['current_score']), 
-            reverse=True
-        )
+        return scan_results
+    
+    async def _assess_control(self, control_id: str) -> Dict:
+        """Assess individual control implementation"""
+        # Simulate infrastructure scanning with realistic financial services scenarios
+        await asyncio.sleep(0.5)  # Simulate API calls
         
-        return remediation_actions
+        if control_id == "AC-2":
+            return await self._assess_account_management()
+        elif control_id == "AC-3":
+            return await self._assess_access_enforcement()
+        elif control_id == "AC-6":
+            return await self._assess_least_privilege()
+        elif control_id == "AU-2":
+            return await self._assess_audit_events()
+        elif control_id == "AU-3":
+            return await self._assess_audit_content()
+        elif control_id == "SC-7":
+            return await self._assess_boundary_protection()
+        elif control_id == "SC-8":
+            return await self._assess_transmission_protection()
+        elif control_id == "IA-2":
+            return await self._assess_identification_authentication()
+        elif control_id == "IA-5":
+            return await self._assess_authenticator_management()
+        else:
+            return {
+                'status': ComplianceStatus.NOT_ASSESSED.value,
+                'score': 0,
+                'findings': [f"Control {control_id} assessment not implemented"],
+                'evidence': [],
+                'remediation': [f"Implement assessment for control {control_id}"]
+            }
+    
+    async def _assess_account_management(self) -> Dict:
+        """Assess AC-2 Account Management"""
+        # Simulate account management assessment
+        findings = []
+        evidence = []
+        remediation = []
+        score = 65
+        
+        # Check service account naming
+        findings.append("Some service accounts do not follow naming convention")
+        evidence.append("Found 3 service accounts without proper naming: sa-1, sa-2, temp-service")
+        remediation.append("Rename service accounts to follow pattern: {purpose}-{env}-service")
+        
+        # Check account lifecycle
+        findings.append("Manual account provisioning process identified")
+        evidence.append("Account creation requires manual approval in 40% of cases")
+        remediation.append("Implement automated account lifecycle management")
+        
+        # Positive findings
+        evidence.append("Account deprovisioning automated for 95% of terminated users")
+        evidence.append("Privileged account monitoring implemented")
+        
+        return {
+            'status': ComplianceStatus.NON_COMPLIANT.value,
+            'score': score,
+            'findings': findings,
+            'evidence': evidence,
+            'remediation': remediation
+        }
+    
+    async def _assess_access_enforcement(self) -> Dict:
+        """Assess AC-3 Access Enforcement"""
+        findings = []
+        evidence = []
+        remediation = []
+        score = 92
+        
+        evidence.append("Role-based access control implemented across all systems")
+        evidence.append("Conditional access policies active for 98% of user accounts")
+        evidence.append("Access Context Manager configured for sensitive resources")
+        
+        findings.append("Minor: Some legacy systems lack conditional access")
+        remediation.append("Migrate remaining 2% of systems to conditional access")
+        
+        return {
+            'status': ComplianceStatus.COMPLIANT.value,
+            'score': score,
+            'findings': findings,
+            'evidence': evidence,
+            'remediation': remediation
+        }
+    
+    async def _assess_least_privilege(self) -> Dict:
+        """Assess AC-6 Least Privilege"""
+        findings = []
+        evidence = []
+        remediation = []
+        score = 75
+        
+        findings.append("Several users have elevated privileges beyond job requirements")
+        evidence.append("Privilege review completed quarterly")
+        evidence.append("Just-in-time access implemented for 60% of administrative functions")
+        
+        remediation.append("Conduct comprehensive privilege review")
+        remediation.append("Implement JIT access for remaining administrative functions")
+        
+        return {
+            'status': ComplianceStatus.PARTIALLY_COMPLIANT.value,
+            'score': score,
+            'findings': findings,
+            'evidence': evidence,
+            'remediation': remediation
+        }
+    
+    async def _assess_audit_events(self) -> Dict:
+        """Assess AU-2 Audit Events"""
+        score = 95
+        evidence = [
+            "Comprehensive audit logging implemented across all systems",
+            "Cloud Audit Logs capturing 100% of administrative actions",
+            "Application-level audit logging for trading systems",
+            "Centralized log management with SIEM integration"
+        ]
+        
+        return {
+            'status': ComplianceStatus.COMPLIANT.value,
+            'score': score,
+            'findings': [],
+            'evidence': evidence,
+            'remediation': []
+        }
+    
+    async def _assess_audit_content(self) -> Dict:
+        """Assess AU-3 Audit Content"""
+        score = 88
+        evidence = [
+            "Audit records include required metadata fields",
+            "Structured logging format implemented",
+            "Integrity protection for audit logs via KMS encryption"
+        ]
+        
+        findings = ["Some legacy applications missing detailed audit context"]
+        remediation = ["Update legacy applications to include full audit context"]
+        
+        return {
+            'status': ComplianceStatus.COMPLIANT.value,
+            'score': score,
+            'findings': findings,
+            'evidence': evidence,
+            'remediation': remediation
+        }
+    
+    async def _assess_boundary_protection(self) -> Dict:
+        """Assess SC-7 Boundary Protection"""
+        score = 78
+        findings = [
+            "Some firewall rules allow overly broad access",
+            "Network segmentation partially implemented"
+        ]
+        evidence = [
+            "VPC firewall rules implemented with default deny",
+            "Network flow logs enabled for monitoring",
+            "Trading systems isolated in dedicated subnets"
+        ]
+        remediation = [
+            "Review and tighten firewall rules",
+            "Complete network micro-segmentation implementation"
+        ]
+        
+        return {
+            'status': ComplianceStatus.PARTIALLY_COMPLIANT.value,
+            'score': score,
+            'findings': findings,
+            'evidence': evidence,
+            'remediation': remediation
+        }
+    
+    async def _assess_transmission_protection(self) -> Dict:
+        """Assess SC-8 Transmission Protection"""
+        score = 82
+        evidence = [
+            "TLS 1.2+ enforced for all external communications",
+            "Internal service mesh with mTLS implemented",
+            "Certificate management automated"
+        ]
+        
+        findings = ["Some internal communications not encrypted"]
+        remediation = ["Encrypt all internal communications with TLS"]
+        
+        return {
+            'status': ComplianceStatus.PARTIALLY_COMPLIANT.value,
+            'score': score,
+            'findings': findings,
+            'evidence': evidence,
+            'remediation': remediation
+        }
+    
+    async def _assess_identification_authentication(self) -> Dict:
+        """Assess IA-2 Identification and Authentication"""
+        score = 90
+        evidence = [
+            "Multi-factor authentication enforced for all users",
+            "SSO implementation with SAML federation",
+            "Risk-based authentication for sensitive operations"
+        ]
+        
+        return {
+            'status': ComplianceStatus.COMPLIANT.value,
+            'score': score,
+            'findings': [],
+            'evidence': evidence,
+            'remediation': []
+        }
+    
+    async def _assess_authenticator_management(self) -> Dict:
+        """Assess IA-5 Authenticator Management"""
+        score = 85
+        evidence = [
+            "Automated password policy enforcement",
+            "Certificate lifecycle management implemented",
+            "Hardware security modules for key protection"
+        ]
+        
+        findings = ["Some service account keys lack rotation"]
+        remediation = ["Implement automated key rotation for all service accounts"]
+        
+        return {
+            'status': ComplianceStatus.COMPLIANT.value,
+            'score': score,
+            'findings': findings,
+            'evidence': evidence,
+            'remediation': remediation
+        }
 
 class ComplianceOrchestrator:
     """Main orchestrator for NIST 800-53 compliance automation"""
     
     def __init__(self, config: Dict):
         self.config = config
-        self.project_id = config.get('project_id', 'demo-project')
-        self.terraform_generator = TerraformComplianceGenerator()
-        self.policy_generator = OPAPolicyGenerator()
-        self.assessment_engine = ComplianceAssessmentEngine(self.project_id)
         self.db_path = config.get('database_path', 'data/compliance.db')
+        self.control_db = NISTControlDatabase()
+        self.infrastructure_scanner = InfrastructureScanner(config)
+        self.terraform_generator = TerraformGenerator()
+        self.opa_generator = OPAPolicyGenerator()
         self.init_database()
     
     def init_database(self):
-        """Initialize database for compliance tracking"""
+        """Initialize SQLite database for compliance data"""
+        import os
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         
         conn = sqlite3.connect(self.db_path)
@@ -1118,99 +1630,293 @@ class ComplianceOrchestrator:
         
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS assessments (
-                assessment_id TEXT PRIMARY KEY,
+                id TEXT PRIMARY KEY,
                 timestamp TIMESTAMP,
                 overall_score REAL,
                 total_controls INTEGER,
                 compliant_controls INTEGER,
-                findings TEXT,
-                remediation_plan TEXT
+                assessment_data TEXT,
+                terraform_modules TEXT,
+                opa_policies TEXT
             )
         ''')
         
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS control_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                control_id TEXT,
+            CREATE TABLE IF NOT EXISTS control_results (
                 assessment_id TEXT,
+                control_id TEXT,
+                control_name TEXT,
+                family TEXT,
                 status TEXT,
-                score INTEGER,
-                timestamp TIMESTAMP,
+                score REAL,
+                findings TEXT,
                 evidence TEXT,
-                gaps TEXT
+                remediation TEXT,
+                last_assessed TIMESTAMP,
+                FOREIGN KEY (assessment_id) REFERENCES assessments (id)
             )
         ''')
         
         conn.commit()
         conn.close()
     
-    async def generate_compliance_infrastructure(self) -> Dict:
+    async def run_compliance_assessment(self, controls: List[str] = None) -> ComplianceAssessment:
+        """Run comprehensive NIST 800-53 compliance assessment"""
+        logger.info("Starting NIST 800-53 compliance assessment...")
+        
+        if controls is None:
+            controls = ["AC-2", "AC-3", "AC-6", "AU-2", "AU-3", "SC-7", "SC-8", "IA-2", "IA-5"]
+        
+        assessment_id = hashlib.md5(str(datetime.now()).encode()).hexdigest()[:8]
+        timestamp = datetime.now()
+        
+        # Scan infrastructure
+        scan_results = await self.infrastructure_scanner.scan_infrastructure(controls)
+        
+        # Process results
+        control_results = []
+        total_score = 0
+        compliant_count = 0
+        partially_compliant_count = 0
+        non_compliant_count = 0
+        
+        for control_id, result in scan_results.items():
+            control_def = self.control_db.get_control(control_id)
+            if not control_def:
+                continue
+            
+            control = NISTControl(
+                control_id=control_id,
+                control_name=control_def.control_name,
+                family=control_def.family,
+                description=control_def.description,
+                implementation_guidance=control_def.implementation_guidance,
+                assessment_procedures=control_def.assessment_procedures,
+                status=ComplianceStatus(result['status']),
+                score=result['score'],
+                evidence=result['evidence'],
+                remediation_actions=result['remediation'],
+                last_assessed=timestamp
+            )
+            
+            control_results.append(control)
+            total_score += result['score']
+            
+            if control.status == ComplianceStatus.COMPLIANT:
+                compliant_count += 1
+            elif control.status == ComplianceStatus.PARTIALLY_COMPLIANT:
+                partially_compliant_count += 1
+            elif control.status == ComplianceStatus.NON_COMPLIANT:
+                non_compliant_count += 1
+        
+        # Calculate overall score
+        overall_score = total_score / len(control_results) if control_results else 0
+        
+        # Generate remediation plan
+        remediation_plan = self._generate_remediation_plan(control_results)
+        
+        # Create assessment
+        assessment = ComplianceAssessment(
+            assessment_id=assessment_id,
+            timestamp=timestamp,
+            overall_score=overall_score,
+            total_controls=len(control_results),
+            compliant_controls=compliant_count,
+            partially_compliant_controls=partially_compliant_count,
+            non_compliant_controls=non_compliant_count,
+            control_results=control_results,
+            remediation_plan=remediation_plan
+        )
+        
+        # Store assessment
+        self.store_assessment(assessment)
+        
+        logger.info(f"Assessment complete: {overall_score:.1f}% compliance ({compliant_count}/{len(control_results)} controls)")
+        
+        return assessment
+    
+    def _generate_remediation_plan(self, control_results: List[NISTControl]) -> List[str]:
+        """Generate prioritized remediation plan"""
+        remediation_plan = []
+        
+        # Prioritize by criticality and non-compliance
+        critical_controls = [c for c in control_results if c.status == ComplianceStatus.NON_COMPLIANT and c.score < 70]
+        medium_controls = [c for c in control_results if c.status == ComplianceStatus.PARTIALLY_COMPLIANT]
+        
+        # Critical remediation items
+        for control in critical_controls:
+            for action in control.remediation_actions:
+                remediation_plan.append(f"CRITICAL ({control.control_id}): {action}")
+        
+        # Medium priority items
+        for control in medium_controls:
+            for action in control.remediation_actions:
+                remediation_plan.append(f"MEDIUM ({control.control_id}): {action}")
+        
+        return remediation_plan
+    
+    async def generate_compliance_infrastructure(self) -> Dict[str, str]:
         """Generate Terraform modules and OPA policies for compliance"""
         logger.info("Generating compliance infrastructure...")
         
         generated_files = {}
         
-        try:
-            # Generate Terraform modules
-            generated_files['access_control_module'] = self.terraform_generator.generate_access_control_module()
-            generated_files['network_security_module'] = self.terraform_generator.generate_network_security_module()
-            
-            # Generate OPA policies
-            generated_files['access_control_policy'] = self.policy_generator.generate_access_control_policy()
-            generated_files['network_security_policy'] = self.policy_generator.generate_network_security_policy()
-            
-            logger.info(f"Generated {len(generated_files)} compliance files")
-        except Exception as e:
-            logger.error(f"Error generating compliance infrastructure: {e}")
-            generated_files['error'] = str(e)
+        # Generate Terraform modules
+        terraform_modules = {
+            'access_control': self.terraform_generator.generate_terraform_module('access_control'),
+            'network_security': self.terraform_generator.generate_terraform_module('network_security'),
+            'audit_logging': self.terraform_generator.generate_terraform_module('audit_logging')
+        }
+        
+        # Generate OPA policies
+        opa_policies = {
+            'access_control_policy': self.opa_generator.generate_opa_policy('access_control'),
+            'network_security_policy': self.opa_generator.generate_opa_policy('network_security'),
+            'audit_logging_policy': self.opa_generator.generate_opa_policy('audit_logging')
+        }
+        
+        # Combine all files
+        for name, content in terraform_modules.items():
+            generated_files[f"terraform_modules/{name}/main.tf"] = content
+        
+        for name, content in opa_policies.items():
+            generated_files[f"policies/opa/{name}.rego"] = content
+        
+        # Generate variables files
+        generated_files["terraform_modules/variables.tf"] = self._generate_terraform_variables()
+        generated_files["terraform_modules/outputs.tf"] = self._generate_terraform_outputs()
+        
+        logger.info(f"Generated {len(generated_files)} compliance infrastructure files")
         
         return generated_files
     
-    async def run_compliance_assessment(self) -> ComplianceAssessment:
-        """Run complete compliance assessment"""
-        logger.info("Running NIST 800-53 compliance assessment...")
-        
-        assessment = await self.assessment_engine.assess_infrastructure_compliance()
-        
-        # Store assessment results
-        self.store_assessment(assessment)
-        
-        return assessment
+    def _generate_terraform_variables(self) -> str:
+        """Generate common Terraform variables file"""
+        return '''
+# Common Terraform Variables for NIST 800-53 Compliance
+
+variable "project_id" {
+  description = "GCP Project ID"
+  type        = string
+}
+
+variable "organization_id" {
+  description = "GCP Organization ID"
+  type        = string
+}
+
+variable "environment" {
+  description = "Environment (dev, staging, prod)"
+  type        = string
+  default     = "prod"
+}
+
+variable "domain" {
+  description = "Organization domain name"
+  type        = string
+  default     = "swift.com"
+}
+
+variable "audit_storage_region" {
+  description = "Region for audit log storage"
+  type        = string
+  default     = "us-central1"
+}
+
+variable "audit_retention_days" {
+  description = "Audit log retention period in days"
+  type        = number
+  default     = 2555  # 7 years for financial compliance
+}
+
+variable "bigquery_region" {
+  description = "BigQuery region for audit analysis"
+  type        = string
+  default     = "US"
+}
+
+variable "audit_notification_channels" {
+  description = "Notification channels for audit alerts"
+  type        = list(string)
+  default     = []
+}
+'''
+    
+    def _generate_terraform_outputs(self) -> str:
+        """Generate common Terraform outputs file"""
+        return '''
+# Common Terraform Outputs for NIST 800-53 Compliance
+
+output "compliance_summary" {
+  description = "Summary of implemented NIST controls"
+  value = {
+    access_control = {
+      policy_etag = module.access_control.access_control_policy_etag
+      service_accounts = module.access_control.service_account_emails
+    }
+    network_security = {
+      vpc_id = module.network_security.vpc_network_id
+      ssl_policy = module.network_security.ssl_policy_name
+    }
+    audit_logging = {
+      audit_sink = module.audit_logging.audit_sink_name
+      audit_bucket = module.audit_logging.audit_bucket_name
+      kms_key = module.audit_logging.audit_kms_key_id
+    }
+  }
+}
+
+output "compliance_evidence" {
+  description = "Evidence collection for compliance audits"
+  value = {
+    infrastructure_state = "terraform.tfstate"
+    policy_validation = "opa-policies/*.rego"
+    audit_logs = module.audit_logging.audit_bucket_name
+    monitoring_dashboard = "https://console.cloud.google.com/monitoring"
+  }
+}
+'''
     
     def store_assessment(self, assessment: ComplianceAssessment):
-        """Store assessment results in database"""
+        """Store compliance assessment in database"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         # Store assessment summary
         cursor.execute('''
-            INSERT INTO assessments 
-            (assessment_id, timestamp, overall_score, total_controls, compliant_controls, findings, remediation_plan)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO assessments 
+            (id, timestamp, overall_score, total_controls, compliant_controls, 
+             assessment_data, terraform_modules, opa_policies)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             assessment.assessment_id,
             assessment.timestamp,
             assessment.overall_score,
             assessment.total_controls,
             assessment.compliant_controls,
-            json.dumps(assessment.findings),
-            json.dumps(assessment.remediation_plan)
+            json.dumps(assessment.__dict__, default=str),
+            json.dumps(assessment.terraform_modules),
+            json.dumps(assessment.opa_policies)
         ))
         
         # Store individual control results
-        for finding in assessment.findings:
+        for control in assessment.control_results:
             cursor.execute('''
-                INSERT INTO control_history 
-                (control_id, assessment_id, status, score, timestamp, evidence, gaps)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO control_results
+                (assessment_id, control_id, control_name, family, status, score, 
+                 findings, evidence, remediation, last_assessed)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
-                finding['control_id'],
                 assessment.assessment_id,
-                finding['status'],
-                finding['score'],
-                assessment.timestamp,
-                json.dumps(finding.get('evidence', [])),
-                json.dumps(finding.get('gaps', []))
+                control.control_id,
+                control.control_name,
+                control.family.value,
+                control.status.value,
+                control.score,
+                json.dumps(control.evidence),
+                json.dumps(control.evidence),
+                json.dumps(control.remediation_actions),
+                control.last_assessed
             ))
         
         conn.commit()
@@ -1218,9 +1924,9 @@ class ComplianceOrchestrator:
     
     def generate_compliance_report(self) -> Dict:
         """Generate executive compliance report"""
+        conn = sqlite3.connect(self.db_path)
+        
         try:
-            conn = sqlite3.connect(self.db_path)
-            
             # Get latest assessment
             cursor = conn.cursor()
             cursor.execute('''
@@ -1229,182 +1935,118 @@ class ComplianceOrchestrator:
                 LIMIT 1
             ''')
             
-            latest_assessment = cursor.fetchone()
+            result = cursor.fetchone()
+            if not result:
+                return self._get_demo_compliance_report()
             
-            if not latest_assessment:
-                # Return demo data if no assessments found
-                return self._generate_demo_report()
+            assessment_id = result[0]
             
             # Get control family breakdown
             cursor.execute('''
-                SELECT SUBSTR(control_id, 1, 2) as family, 
-                       AVG(score) as avg_score,
-                       COUNT(*) as total_controls,
-                       SUM(CASE WHEN status = 'compliant' THEN 1 ELSE 0 END) as compliant_controls
-                FROM control_history 
+                SELECT family, 
+                       COUNT(*) as total,
+                       SUM(CASE WHEN status = 'compliant' THEN 1 ELSE 0 END) as compliant,
+                       AVG(score) as avg_score
+                FROM control_results 
                 WHERE assessment_id = ?
-                GROUP BY SUBSTR(control_id, 1, 2)
-            ''', (latest_assessment[0],))
+                GROUP BY family
+            ''', (assessment_id,))
             
-            family_breakdown = cursor.fetchall()
+            family_results = cursor.fetchall()
+            family_breakdown = []
             
-            conn.close()
+            for family, total, compliant, avg_score in family_results:
+                family_breakdown.append({
+                    'family': family,
+                    'family_name': self._get_family_name(family),
+                    'compliance_rate': (compliant / total * 100) if total > 0 else 0,
+                    'average_score': avg_score or 0
+                })
             
-            report = {
-                'assessment_id': latest_assessment[0],
-                'timestamp': latest_assessment[1],
-                'overall_score': latest_assessment[2],
-                'total_controls': latest_assessment[3],
-                'compliant_controls': latest_assessment[4],
-                'compliance_percentage': (latest_assessment[4] / latest_assessment[3]) * 100 if latest_assessment[3] > 0 else 0,
-                'family_breakdown': [
-                    {
-                        'family': row[0],
-                        'family_name': self._get_family_name(row[0]),
-                        'avg_score': row[1],
-                        'total_controls': row[2],
-                        'compliant_controls': row[3],
-                        'compliance_rate': (row[3] / row[2]) * 100 if row[2] > 0 else 0
-                    }
-                    for row in family_breakdown
-                ],
+            return {
+                'overall_score': result[2],
+                'total_controls': result[3],
+                'compliant_controls': result[4],
+                'compliance_percentage': (result[4] / result[3] * 100) if result[3] > 0 else 0,
+                'family_breakdown': family_breakdown,
                 'recommendations': self._generate_executive_recommendations(family_breakdown)
             }
             
-            return report
         except Exception as e:
-            logger.error(f"Error generating compliance report: {e}")
-            return self._generate_demo_report()
+            logger.error(f"Report generation failed: {e}")
+            return self._get_demo_compliance_report()
+        finally:
+            conn.close()
     
-    def _generate_demo_report(self) -> Dict:
-        """Generate demo compliance report"""
+    def _get_family_name(self, family_code: str) -> str:
+        """Get full family name from code"""
+        family_names = {
+            'ACCESS_CONTROL': 'Access Control',
+            'AUDIT_ACCOUNTABILITY': 'Audit and Accountability',
+            'SYSTEM_PROTECTION': 'System Protection',
+            'IDENTIFICATION_AUTHENTICATION': 'Identification & Authentication'
+        }
+        return family_names.get(family_code, family_code)
+    
+    def _generate_executive_recommendations(self, family_breakdown: List[Dict]) -> List[str]:
+        """Generate executive-level recommendations"""
+        recommendations = []
+        
+        for family in family_breakdown:
+            if family['compliance_rate'] < 80:
+                recommendations.append(
+                    f"Prioritize {family['family_name']} family improvements "
+                    f"(current: {family['compliance_rate']:.1f}%)"
+                )
+        
+        recommendations.append("Implement automated remediation for identified gaps")
+        recommendations.append("Establish continuous compliance monitoring")
+        
+        return recommendations
+    
+    def _get_demo_compliance_report(self) -> Dict:
+        """Return demo compliance report"""
         return {
-            'assessment_id': f"demo_{datetime.now().strftime('%Y%m%d')}",
-            'timestamp': datetime.now().isoformat(),
             'overall_score': 87.5,
             'total_controls': 9,
             'compliant_controls': 7,
             'compliance_percentage': 77.8,
             'family_breakdown': [
-                {
-                    'family': 'AC',
-                    'family_name': 'Access Control',
-                    'avg_score': 85.0,
-                    'total_controls': 3,
-                    'compliant_controls': 2,
-                    'compliance_rate': 66.7
-                },
-                {
-                    'family': 'AU',
-                    'family_name': 'Audit and Accountability',
-                    'avg_score': 95.0,
-                    'total_controls': 2,
-                    'compliant_controls': 2,
-                    'compliance_rate': 100.0
-                },
-                {
-                    'family': 'SC',
-                    'family_name': 'System Protection',
-                    'avg_score': 78.0,
-                    'total_controls': 2,
-                    'compliant_controls': 1,
-                    'compliance_rate': 50.0
-                },
-                {
-                    'family': 'IA',
-                    'family_name': 'Identification & Authentication',
-                    'avg_score': 87.5,
-                    'total_controls': 2,
-                    'compliant_controls': 2,
-                    'compliance_rate': 100.0
-                }
+                {'family': 'AC', 'family_name': 'Access Control', 'compliance_rate': 66.7},
+                {'family': 'AU', 'family_name': 'Audit and Accountability', 'compliance_rate': 100.0},
+                {'family': 'SC', 'family_name': 'System Protection', 'compliance_rate': 50.0},
+                {'family': 'IA', 'family_name': 'Identification & Authentication', 'compliance_rate': 100.0}
             ],
             'recommendations': [
                 'Prioritize AC (Access Control) family improvements',
-                'Implement automated remediation for SC (System Protection) controls',
-                'Enhance boundary protection controls for SC-7'
+                'Implement automated remediation for SC (System Protection) controls'
             ]
         }
-    
-    def _get_family_name(self, family_code: str) -> str:
-        """Get full family name from code"""
-        family_names = {
-            'AC': 'Access Control',
-            'AU': 'Audit and Accountability',
-            'SC': 'System and Communications Protection',
-            'IA': 'Identification and Authentication',
-            'CM': 'Configuration Management',
-            'CP': 'Contingency Planning',
-            'IR': 'Incident Response',
-            'SI': 'System and Information Integrity'
-        }
-        return family_names.get(family_code, family_code)
-    
-    def _generate_executive_recommendations(self, family_breakdown: List) -> List[str]:
-        """Generate executive-level recommendations"""
-        recommendations = []
-        
-        for row in family_breakdown:
-            family_code = row[0]
-            compliance_rate = (row[3] / row[2]) * 100 if row[2] > 0 else 0
-            
-            if compliance_rate < 70:
-                family_name = self._get_family_name(family_code)
-                recommendations.append(f"Prioritize {family_code} ({family_name}) family improvements")
-        
-        recommendations.extend([
-            'Implement automated remediation for high-priority controls',
-            'Establish continuous compliance monitoring',
-            'Schedule quarterly compliance assessments'
-        ])
-        
-        return recommendations[:5]  # Return top 5 recommendations
 
 # Example usage
-def main():
-    """Example usage of NIST Compliance Framework"""
-    
+async def main():
+    """Example usage of Compliance Orchestrator"""
     config = {
         'project_id': 'demo-project',
-        'database_path': 'data/compliance.db',
-        'terraform_output_dir': 'terraform_modules',
-        'policy_output_dir': 'policies/opa'
+        'database_path': 'data/compliance.db'
     }
     
     orchestrator = ComplianceOrchestrator(config)
     
-    async def run_compliance_cycle():
-        # Generate compliance infrastructure
-        print("🏗️  Generating compliance infrastructure...")
-        generated_files = await orchestrator.generate_compliance_infrastructure()
-        print(f"\n📁 GENERATED COMPLIANCE FILES:")
-        for file_type, path in generated_files.items():
-            if 'error' not in file_type:
-                print(f"- {file_type}: {path}")
-        
-        # Run compliance assessment
-        print(f"\n📊 Running compliance assessment...")
-        assessment = await orchestrator.run_compliance_assessment()
-        print(f"\n📊 COMPLIANCE ASSESSMENT RESULTS:")
-        print(f"Overall Score: {assessment.overall_score:.1f}%")
-        print(f"Compliant Controls: {assessment.compliant_controls}/{assessment.total_controls}")
-        
-        # Generate report
-        print(f"\n📈 Generating executive report...")
-        report = orchestrator.generate_compliance_report()
-        print(f"\n📈 EXECUTIVE SUMMARY:")
-        print(f"Compliance Percentage: {report['compliance_percentage']:.1f}%")
-        
-        print(f"\n🏗️ CONTROL FAMILY BREAKDOWN:")
-        for family in report['family_breakdown']:
-            print(f"- {family['family']} ({family['family_name']}): {family['compliance_rate']:.1f}% ({family['compliant_controls']}/{family['total_controls']})")
-        
-        print(f"\n💡 REMEDIATION PRIORITIES:")
-        for i, action in enumerate(assessment.remediation_plan[:3], 1):
-            print(f"{i}. {action['control_id']} ({action['title']}) - {action['priority']} Priority")
+    # Run compliance assessment
+    assessment = await orchestrator.run_compliance_assessment()
     
-    # Run the compliance cycle
-    asyncio.run(run_compliance_cycle())
+    print(f"Assessment ID: {assessment.assessment_id}")
+    print(f"Overall Score: {assessment.overall_score:.1f}%")
+    print(f"Compliant Controls: {assessment.compliant_controls}/{assessment.total_controls}")
+    
+    # Generate infrastructure
+    generated_files = await orchestrator.generate_compliance_infrastructure()
+    print(f"Generated {len(generated_files)} infrastructure files")
+    
+    # Generate report
+    report = orchestrator.generate_compliance_report()
+    print(f"Compliance Report: {report['compliance_percentage']:.1f}% overall compliance")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

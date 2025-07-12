@@ -1,0 +1,74 @@
+# Security Tools Platform Configuration
+# Copy this file to .env and customize for your environment
+
+# Core Application Settings
+PROJECT_ID=demo-project
+ENVIRONMENT=development
+DEBUG=true
+DATABASE_PATH=data/security_tools.db
+
+# API Configuration
+API_HOST=0.0.0.0
+API_PORT=8000
+API_WORKERS=1
+
+# External API Keys (replace with your actual keys)
+BRAVE_API_KEY=your_brave_search_api_key_here
+GITHUB_PERSONAL_ACCESS_TOKEN=your_github_token_here
+
+# Google Cloud Configuration (optional)
+GOOGLE_APPLICATION_CREDENTIALS=path/to/service-account.json
+GCP_PROJECT_ID=your-gcp-project-id
+GCP_ORGANIZATION_ID=your-gcp-org-id
+
+# Chronicle SIEM Configuration
+CHRONICLE_PROJECT_ID=your-chronicle-project
+CHRONICLE_REGION=us-central1
+
+# ML Model Configuration
+ML_MODEL_PATH=models/
+ML_TRAINING_DATA_PATH=data/training/
+ML_CONFIDENCE_THRESHOLD=0.8
+
+# Compliance Configuration
+NIST_CONTROLS=AC-2,AC-3,AC-6,AU-2,AU-3,SC-7,SC-8,IA-2,IA-5
+COMPLIANCE_ASSESSMENT_INTERVAL=24h
+AUTO_REMEDIATION_ENABLED=true
+
+# Financial Services Specific
+SWIFT_DOMAIN=swift.com
+TRADING_HOURS_START=06:00
+TRADING_HOURS_END=18:00
+WIRE_TRANSFER_MONITORING=true
+
+# Security Settings
+SESSION_TIMEOUT=3600
+API_RATE_LIMIT=100
+ENCRYPTION_KEY_PATH=keys/encryption.key
+JWT_SECRET_KEY=your-jwt-secret-key
+
+# Notification Settings
+SLACK_WEBHOOK_URL=your-slack-webhook-url
+EMAIL_NOTIFICATIONS=true
+SMS_NOTIFICATIONS=false
+
+# Logging Configuration
+LOG_LEVEL=INFO
+LOG_FORMAT=json
+LOG_RETENTION_DAYS=30
+
+# Performance Settings
+CACHE_TTL=300
+MAX_CONCURRENT_SCANS=5
+BATCH_SIZE=100
+
+# Advanced Features
+ENABLE_THREAT_INTELLIGENCE=true
+ENABLE_BEHAVIORAL_ANALYTICS=true
+ENABLE_AUTOMATED_RESPONSE=true
+ENABLE_COMPLIANCE_AUTOMATION=true
+
+# Development Settings (disable in production)
+ENABLE_SWAGGER_UI=true
+ENABLE_DEBUG_ENDPOINTS=true
+MOCK_EXTERNAL_APIS=false

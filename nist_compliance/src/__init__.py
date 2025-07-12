@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-NIST 800-53 Compliance Framework Module
+NIST Compliance Framework Module
 Policy-as-code implementation with automated monitoring and remediation
 """
 

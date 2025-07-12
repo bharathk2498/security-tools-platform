@@ -8,12 +8,12 @@ from .nist_compliance import (
     ComplianceOrchestrator,
     NISTControl,
     ComplianceAssessment,
+    ComplianceStatus,
+    ControlFamily,
     TerraformGenerator,
     OPAPolicyGenerator,
     NISTControlDatabase,
-    InfrastructureScanner,
-    ComplianceStatus,
-    ControlFamily
+    InfrastructureScanner
 )
 
 __version__ = "1.0.0"
@@ -23,10 +23,10 @@ __all__ = [
     "ComplianceOrchestrator",
     "NISTControl",
     "ComplianceAssessment",
+    "ComplianceStatus",
+    "ControlFamily",
     "TerraformGenerator",
     "OPAPolicyGenerator", 
     "NISTControlDatabase",
-    "InfrastructureScanner",
-    "ComplianceStatus",
-    "ControlFamily"
+    "InfrastructureScanner"
 ]

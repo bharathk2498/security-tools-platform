@@ -1,25 +1,29 @@
 version: '3.8'
 
 services:
-  # Main Security Tools Platform API
+  # Main Security Platform Application
   security-platform:
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile
     container_name: security-tools-platform
     ports:
       - "8000:8000"
-      - "8050:8050"
+      - "8050:8050"  # Dashboard port
     environment:
+      - DATABASE_URL=postgresql://security:security123@postgres:5432/security_tools
+      - REDIS_URL=redis://redis:6379/0
       - ENVIRONMENT=production
-      - DATABASE_PATH=data/security_tools.db
-      - PROJECT_ID=${PROJECT_ID:-demo-project}
-      - BRAVE_API_KEY=${BRAVE_API_KEY}
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DEBUG=false
+      - PROJECT_ID=demo-project
+      - ENABLE_DEMO_MODE=true
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+      - security_models:/app/models
     depends_on:
-      - redis
       - postgres
+      - redis
     restart: unless-stopped
     networks:
       - security-network
@@ -30,96 +34,76 @@ services:
       retries: 3
       start_period: 40s
 
-  # Redis for caching and session management
-  redis:
-    image: redis:7-alpine
-    container_name: security-tools-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    networks:
-      - security-network
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # PostgreSQL for production database (optional)
+  # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: security-tools-postgres
+    container_name: security-postgres
     environment:
       POSTGRES_DB: security_tools
-      POSTGRES_USER: security_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_password_change_me}
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: security
+      POSTGRES_PASSWORD: security123
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
-    restart: unless-stopped
-    networks:
-      - security-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U security_user -d security_tools"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Nginx reverse proxy for production
-  nginx:
-    image: nginx:alpine
-    container_name: security-tools-nginx
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - security-platform
+      - "5432:5432"
     restart: unless-stopped
     networks:
       - security-network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD-SHELL", "pg_isready -U security -d security_tools"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # Prometheus for monitoring
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: security-redis
+    command: redis-server --appendonly yes --requirepass redis123
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - security-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Prometheus Monitoring
   prometheus:
     image: prom/prometheus:latest
-    container_name: security-tools-prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
+    container_name: security-prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/etc/prometheus/console_libraries'
       - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=200h'
+      - '--storage.tsdb.retention.time=30d'
       - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
     restart: unless-stopped
     networks:
       - security-network
 
-  # Grafana for dashboards
+  # Grafana Dashboards
   grafana:
     image: grafana/grafana:latest
-    container_name: security-tools-grafana
+    container_name: security-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
     ports:
       - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
-      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
@@ -130,56 +114,142 @@ services:
     depends_on:
       - prometheus
 
-  # ElasticSearch for log aggregation (optional)
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
-    container_name: security-tools-elasticsearch
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: security-nginx
     ports:
-      - "9200:9200"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./nginx/logs:/var/log/nginx
+    restart: unless-stopped
+    networks:
+      - security-network
+    depends_on:
+      - security-platform
+
+  # Elasticsearch for Logging
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.5.0
+    container_name: security-elasticsearch
+    environment:
+      - node.name=security-es
+      - cluster.name=security-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
     restart: unless-stopped
     networks:
       - security-network
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
-  # Kibana for log visualization (optional)
+  # Kibana for Log Visualization
   kibana:
-    image: docker.elastic.co/kibana/kibana:8.8.0
-    container_name: security-tools-kibana
-    ports:
-      - "5601:5601"
+    image: docker.elastic.co/kibana/kibana:8.5.0
+    container_name: security-kibana
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-    depends_on:
-      - elasticsearch
+    ports:
+      - "5601:5601"
     restart: unless-stopped
     networks:
       - security-network
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    depends_on:
+      - elasticsearch
+
+  # MinIO for Object Storage (S3-compatible)
+  minio:
+    image: minio/minio:latest
+    container_name: security-minio
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=security
+      - MINIO_ROOT_PASSWORD=security123456
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+    networks:
+      - security-network
+
+  # Jaeger for Distributed Tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: security-jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger collector
+    restart: unless-stopped
+    networks:
+      - security-network
+
+# Development Override Services
+  # pgAdmin for Database Management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: security-pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@security.local
+      - PGADMIN_DEFAULT_PASSWORD=admin123
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    restart: unless-stopped
+    networks:
+      - security-network
+    depends_on:
+      - postgres
+    profiles:
+      - dev
+
+  # Redis Commander for Redis Management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: security-redis-commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379:0:redis123
+    ports:
+      - "8081:8081"
+    restart: unless-stopped
+    networks:
+      - security-network
+    depends_on:
+      - redis
+    profiles:
+      - dev
 
 volumes:
   postgres_data:
     driver: local
   redis_data:
     driver: local
-  prometheus_data:
+  elasticsearch_data:
     driver: local
   grafana_data:
     driver: local
-  elasticsearch_data:
+  prometheus_data:
+    driver: local
+  minio_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  security_models:
     driver: local
 
 networks:
@@ -189,20 +259,7 @@ networks:
       config:
         - subnet: 172.20.0.0/16
 
-# Additional configurations for production deployment
-x-logging: &default-logging
-  driver: "json-file"
-  options:
-    max-size: "10m"
-    max-file: "3"
-
-# Override for production with logging
-services:
-  security-platform:
-    logging: *default-logging
-  redis:
-    logging: *default-logging
-  postgres:
-    logging: *default-logging
-  nginx:
-    logging: *default-logging
+# Development configuration
+# Use: docker-compose --profile dev up -d
+# Production configuration  
+# Use: docker-compose up -d

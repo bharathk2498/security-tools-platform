@@ -1,112 +1,116 @@
 [
   {
-    "id": "CHR_001_20240715_103000",
+    "id": "CHR_001_20250115_103000",
     "rule_name": "Suspicious Login from TOR Exit Node",
     "severity": 3,
-    "timestamp": "2024-07-15T10:30:00Z",
+    "timestamp": "2025-01-15T10:30:00Z",
     "source_ip": "185.220.100.240",
     "destination_ip": "10.0.1.50",
     "user": "trading_admin@swift.com",
     "event_type": "authentication_failure",
-    "raw_log": "Failed login attempt for user trading_admin@swift.com from TOR exit node 185.220.100.240. Multiple failed attempts detected from anonymized network."
+    "raw_log": "Failed login attempt for user trading_admin@swift.com from TOR exit node 185.220.100.240",
+    "metadata": {
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "geographic_location": "Unknown (TOR)",
+      "previous_logins": 0,
+      "account_creation_date": "2024-03-15T09:00:00Z",
+      "privileges": ["trader", "market_data_viewer"],
+      "department": "Trading Operations"
+    }
   },
   {
-    "id": "CHR_002_20240715_111500",
+    "id": "CHR_002_20250115_111500",
     "rule_name": "Privilege Escalation via Service Account",
     "severity": 4,
-    "timestamp": "2024-07-15T11:15:00Z",
+    "timestamp": "2025-01-15T11:15:00Z",
     "source_ip": "10.0.1.100",
     "destination_ip": "10.0.1.10",
     "user": "payment_processor@swift.com",
     "event_type": "privilege_escalation",
-    "raw_log": "Service account payment_processor@swift.com gained administrative privileges outside normal workflow. Privilege escalation detected during non-business hours."
+    "raw_log": "Service account payment_processor@swift.com gained administrative privileges outside normal workflow",
+    "metadata": {
+      "escalated_role": "admin",
+      "previous_role": "service_user",
+      "escalation_method": "IAM_POLICY_MODIFICATION",
+      "approver": "NONE",
+      "business_justification": "",
+      "system_affected": "payment_processing_system"
+    }
   },
   {
-    "id": "CHR_003_20240715_143000",
+    "id": "CHR_003_20250115_143000",
     "rule_name": "Unusual Wire Transfer Data Access",
     "severity": 3,
-    "timestamp": "2024-07-15T14:30:00Z",
-    "source_ip": "10.0.2.75",
-    "destination_ip": "10.0.1.25",
+    "timestamp": "2025-01-15T14:30:00Z",
+    "source_ip": "10.0.2.150",
+    "destination_ip": "10.0.1.200",
     "user": "back_office@swift.com",
     "event_type": "data_access_anomaly",
-    "raw_log": "User back_office@swift.com accessed wire transfer database outside normal business hours. Data volume: 150% above baseline, unusual query patterns detected."
+    "raw_log": "User back_office@swift.com accessed wire transfer data outside normal business hours and patterns",
+    "metadata": {
+      "data_accessed": "wire_transfer_records",
+      "access_time": "after_hours",
+      "normal_access_pattern": "business_hours_only",
+      "data_volume": "unusually_high",
+      "transaction_value_range": "$10M-$50M",
+      "geographic_scope": "cross_border"
+    }
   },
   {
-    "id": "CHR_004_20240715_160000",
+    "id": "CHR_004_20250115_160000",
     "rule_name": "Malware Detection on Trading System",
     "severity": 4,
-    "timestamp": "2024-07-15T16:00:00Z",
-    "source_ip": "10.0.1.85",
-    "destination_ip": "10.0.1.90",
+    "timestamp": "2025-01-15T16:00:00Z",
+    "source_ip": "10.0.1.75",
+    "destination_ip": "external",
     "user": "system",
     "event_type": "malware_detection",
-    "raw_log": "Malware signature detected on trading system host trading-prod-001. Process: suspicious_trader.exe. Immediate isolation required."
+    "raw_log": "Trojan.Banking.Swift detected on trading workstation TR-WS-001, attempting to exfiltrate market data",
+    "metadata": {
+      "malware_family": "Trojan.Banking.Swift",
+      "affected_system": "trading_workstation_001",
+      "detection_method": "behavioral_analysis",
+      "data_at_risk": ["market_data", "trading_positions", "customer_orders"],
+      "containment_status": "quarantined",
+      "potential_impact": "critical"
+    }
   },
   {
-    "id": "CHR_005_20240715_171500",
+    "id": "CHR_005_20250115_174500",
     "rule_name": "Lateral Movement Detected",
     "severity": 2,
-    "timestamp": "2024-07-15T17:15:00Z",
-    "source_ip": "10.0.3.45",
-    "destination_ip": "10.0.1.60",
-    "user": "service_account_monitor",
+    "timestamp": "2025-01-15T17:45:00Z",
+    "source_ip": "10.0.1.100",
+    "destination_ip": "10.0.2.25",
+    "user": "service_account_001",
     "event_type": "lateral_movement",
-    "raw_log": "Suspicious network activity detected. Host 10.0.3.45 attempting connections to multiple internal systems. Pattern matches known lateral movement techniques."
+    "raw_log": "Service account attempting to access multiple systems in payment processing network",
+    "metadata": {
+      "movement_pattern": "systematic_enumeration",
+      "systems_accessed": ["payment_gateway", "transaction_processor", "compliance_monitor"],
+      "authentication_method": "service_account_tokens",
+      "access_success_rate": "60%",
+      "time_span": "15_minutes",
+      "business_justification": "unknown"
+    }
   },
   {
-    "id": "CHR_006_20240715_183000",
-    "rule_name": "Financial Data Exfiltration Attempt",
-    "severity": 4,
-    "timestamp": "2024-07-15T18:30:00Z",
-    "source_ip": "10.0.2.120",
-    "destination_ip": "203.0.113.50",
-    "user": "financial_analyst@swift.com",
-    "event_type": "data_exfiltration",
-    "raw_log": "Large volume data transfer detected from financial database to external IP. Volume: 2.3GB, Destination: suspicious external host. Financial records potentially compromised."
-  },
-  {
-    "id": "CHR_007_20240715_194500",
-    "rule_name": "Insider Trading System Abuse",
+    "id": "CHR_006_20250115_193000",
+    "rule_name": "Insider Threat: Off-hours Database Access",
     "severity": 3,
-    "timestamp": "2024-07-15T19:45:00Z",
-    "source_ip": "10.0.1.95",
-    "destination_ip": "10.0.1.15",
-    "user": "trader_john@swift.com",
-    "event_type": "policy_violation",
-    "raw_log": "Trading system access outside authorized hours. User trader_john@swift.com accessed market data systems at 19:45 (after market close). Potential insider trading concern."
-  },
-  {
-    "id": "CHR_008_20240715_210000",
-    "rule_name": "Cryptocurrency Mining Detection",
-    "severity": 2,
-    "timestamp": "2024-07-15T21:00:00Z",
-    "source_ip": "10.0.2.200",
-    "destination_ip": "198.51.100.75",
-    "user": "workstation_user@swift.com",
-    "event_type": "unauthorized_software",
-    "raw_log": "Cryptocurrency mining software detected on workstation. High CPU usage and network connections to mining pool. Resource abuse on company infrastructure."
-  },
-  {
-    "id": "CHR_009_20240715_224500",
-    "rule_name": "Database Schema Modification",
-    "severity": 3,
-    "timestamp": "2024-07-15T22:45:00Z",
-    "source_ip": "10.0.1.105",
-    "destination_ip": "10.0.1.20",
-    "user": "database_admin@swift.com",
-    "event_type": "schema_change",
-    "raw_log": "Unauthorized database schema modification detected in financial_transactions table. Admin database_admin@swift.com modified critical financial data structures without proper approval."
-  },
-  {
-    "id": "CHR_010_20240715_235900",
-    "rule_name": "APT Communication Channel",
-    "severity": 4,
-    "timestamp": "2024-07-15T23:59:00Z",
-    "source_ip": "10.0.1.88",
-    "destination_ip": "91.198.174.192",
-    "user": "system",
-    "event_type": "c2_communication",
-    "raw_log": "Suspected command and control communication detected. Encrypted traffic to known APT infrastructure. Pattern matches Lazarus Group communication protocols used in previous financial sector attacks."
+    "timestamp": "2025-01-15T19:30:00Z",
+    "source_ip": "10.0.3.45",
+    "destination_ip": "10.0.1.200",
+    "user": "db_admin@swift.com",
+    "event_type": "insider_threat_indicator",
+    "raw_log": "Database administrator accessing customer financial records outside business hours without approval",
+    "metadata": {
+      "access_type": "direct_database_query",
+      "records_accessed": "customer_account_details",
+      "query_complexity": "complex_joins",
+      "data_export": "attempted",
+      "approval_workflow": "bypassed",
+      "risk_indicators": ["after_hours", "high_privilege", "export_attempt"]
+    }
   }
 ]

@@ -1,0 +1,112 @@
+[
+  {
+    "id": "CHR_001_20240715_103000",
+    "rule_name": "Suspicious Login from TOR Exit Node",
+    "severity": 3,
+    "timestamp": "2024-07-15T10:30:00Z",
+    "source_ip": "185.220.100.240",
+    "destination_ip": "10.0.1.50",
+    "user": "trading_admin@swift.com",
+    "event_type": "authentication_failure",
+    "raw_log": "Failed login attempt for user trading_admin@swift.com from TOR exit node 185.220.100.240. Multiple failed attempts detected from anonymized network."
+  },
+  {
+    "id": "CHR_002_20240715_111500",
+    "rule_name": "Privilege Escalation via Service Account",
+    "severity": 4,
+    "timestamp": "2024-07-15T11:15:00Z",
+    "source_ip": "10.0.1.100",
+    "destination_ip": "10.0.1.10",
+    "user": "payment_processor@swift.com",
+    "event_type": "privilege_escalation",
+    "raw_log": "Service account payment_processor@swift.com gained administrative privileges outside normal workflow. Privilege escalation detected during non-business hours."
+  },
+  {
+    "id": "CHR_003_20240715_143000",
+    "rule_name": "Unusual Wire Transfer Data Access",
+    "severity": 3,
+    "timestamp": "2024-07-15T14:30:00Z",
+    "source_ip": "10.0.2.75",
+    "destination_ip": "10.0.1.25",
+    "user": "back_office@swift.com",
+    "event_type": "data_access_anomaly",
+    "raw_log": "User back_office@swift.com accessed wire transfer database outside normal business hours. Data volume: 150% above baseline, unusual query patterns detected."
+  },
+  {
+    "id": "CHR_004_20240715_160000",
+    "rule_name": "Malware Detection on Trading System",
+    "severity": 4,
+    "timestamp": "2024-07-15T16:00:00Z",
+    "source_ip": "10.0.1.85",
+    "destination_ip": "10.0.1.90",
+    "user": "system",
+    "event_type": "malware_detection",
+    "raw_log": "Malware signature detected on trading system host trading-prod-001. Process: suspicious_trader.exe. Immediate isolation required."
+  },
+  {
+    "id": "CHR_005_20240715_171500",
+    "rule_name": "Lateral Movement Detected",
+    "severity": 2,
+    "timestamp": "2024-07-15T17:15:00Z",
+    "source_ip": "10.0.3.45",
+    "destination_ip": "10.0.1.60",
+    "user": "service_account_monitor",
+    "event_type": "lateral_movement",
+    "raw_log": "Suspicious network activity detected. Host 10.0.3.45 attempting connections to multiple internal systems. Pattern matches known lateral movement techniques."
+  },
+  {
+    "id": "CHR_006_20240715_183000",
+    "rule_name": "Financial Data Exfiltration Attempt",
+    "severity": 4,
+    "timestamp": "2024-07-15T18:30:00Z",
+    "source_ip": "10.0.2.120",
+    "destination_ip": "203.0.113.50",
+    "user": "financial_analyst@swift.com",
+    "event_type": "data_exfiltration",
+    "raw_log": "Large volume data transfer detected from financial database to external IP. Volume: 2.3GB, Destination: suspicious external host. Financial records potentially compromised."
+  },
+  {
+    "id": "CHR_007_20240715_194500",
+    "rule_name": "Insider Trading System Abuse",
+    "severity": 3,
+    "timestamp": "2024-07-15T19:45:00Z",
+    "source_ip": "10.0.1.95",
+    "destination_ip": "10.0.1.15",
+    "user": "trader_john@swift.com",
+    "event_type": "policy_violation",
+    "raw_log": "Trading system access outside authorized hours. User trader_john@swift.com accessed market data systems at 19:45 (after market close). Potential insider trading concern."
+  },
+  {
+    "id": "CHR_008_20240715_210000",
+    "rule_name": "Cryptocurrency Mining Detection",
+    "severity": 2,
+    "timestamp": "2024-07-15T21:00:00Z",
+    "source_ip": "10.0.2.200",
+    "destination_ip": "198.51.100.75",
+    "user": "workstation_user@swift.com",
+    "event_type": "unauthorized_software",
+    "raw_log": "Cryptocurrency mining software detected on workstation. High CPU usage and network connections to mining pool. Resource abuse on company infrastructure."
+  },
+  {
+    "id": "CHR_009_20240715_224500",
+    "rule_name": "Database Schema Modification",
+    "severity": 3,
+    "timestamp": "2024-07-15T22:45:00Z",
+    "source_ip": "10.0.1.105",
+    "destination_ip": "10.0.1.20",
+    "user": "database_admin@swift.com",
+    "event_type": "schema_change",
+    "raw_log": "Unauthorized database schema modification detected in financial_transactions table. Admin database_admin@swift.com modified critical financial data structures without proper approval."
+  },
+  {
+    "id": "CHR_010_20240715_235900",
+    "rule_name": "APT Communication Channel",
+    "severity": 4,
+    "timestamp": "2024-07-15T23:59:00Z",
+    "source_ip": "10.0.1.88",
+    "destination_ip": "91.198.174.192",
+    "user": "system",
+    "event_type": "c2_communication",
+    "raw_log": "Suspected command and control communication detected. Encrypted traffic to known APT infrastructure. Pattern matches Lazarus Group communication protocols used in previous financial sector attacks."
+  }
+]
